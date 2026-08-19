@@ -1,0 +1,17 @@
+name: AnimalFarm
+version: 1.0.0
+author: dagxam
+main: ru.dagxam.animalfarm.AnimalFarmPlugin
+api-version: '1.21'
+description: Расширенная система фермерских животных и автоматического кормления.
+
+commands:
+  animalfarm:
+    description: Управление плагином AnimalFarm.
+    usage: /animalfarm <reload|info>
+    permission: animalfarm.admin
+
+permissions:
+  animalfarm.admin:
+    description: Доступ к административным командам AnimalFarm.
+    default: op
