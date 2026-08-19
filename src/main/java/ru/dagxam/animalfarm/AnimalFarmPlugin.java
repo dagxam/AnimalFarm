@@ -3,7 +3,6 @@ package ru.dagxam.animalfarm;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.block.BlockState;
-import org.bukkit.block.Container;
 import org.bukkit.block.data.type.Composter;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Animals;
@@ -15,10 +14,14 @@ import org.bukkit.entity.Player;
 import org.bukkit.entity.Sheep;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.block.Action;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
+import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.NamespacedKey;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
@@ -28,10 +31,12 @@ import java.util.concurrent.ThreadLocalRandom;
 public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
 
     private final Map<UUID, Long> milkingCooldown = new HashMap<>();
+    private NamespacedKey storedFoodKey;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        storedFoodKey = new NamespacedKey(this, "stored_food");
         getServer().getPluginManager().registerEvents(this, this);
         AnimalFarmCommand command = new AnimalFarmCommand(this);
         Objects.requireNonNull(getCommand("animalfarm")).setExecutor(command);
@@ -88,6 +93,55 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
         player.sendMessage(message("prefix") + message(messageKey));
     }
 
+    @EventHandler(ignoreCancelled = true)
+    public void onComposterInteract(PlayerInteractEvent event) {
+        if (event.getHand() != EquipmentSlot.HAND || event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
+        if (event.getClickedBlock() == null || event.getClickedBlock().getType() != Material.COMPOSTER) return;
+        if (!getConfig().getBoolean("automatic-feeder.enabled", true)) return;
+
+        Player player = event.getPlayer();
+        ItemStack hand = player.getInventory().getItemInMainHand();
+        Material food = resolveAcceptedFood(hand.getType());
+        if (food == null) return;
+
+        event.setCancelled(true);
+        Composter composter = (Composter) event.getClickedBlock().getBlockData();
+        int level = composter.getLevel();
+        if (level >= 7) return;
+
+        storeFood(event.getClickedBlock().getState(), food);
+        if (hand.getAmount() > 1) hand.setAmount(hand.getAmount() - 1);
+        else player.getInventory().setItemInMainHand(null);
+
+        composter.setLevel(level + 1);
+        event.getClickedBlock().setBlockData(composter);
+    }
+
+    private Material resolveAcceptedFood(Material material) {
+        if (material == Material.WHEAT) return Material.WHEAT;
+        if (material == Material.WHEAT_SEEDS || material == Material.BEETROOT_SEEDS || material == Material.PUMPKIN_SEEDS || material == Material.MELON_SEEDS) {
+            return material;
+        }
+        return null;
+    }
+
+    private void storeFood(BlockState state, Material food) {
+        String existing = state.getPersistentDataContainer().get(storedFoodKey, PersistentDataType.STRING);
+        if (existing == null) state.getPersistentDataContainer().set(storedFoodKey, PersistentDataType.STRING, food.name());
+        state.update(true, false);
+    }
+
+    private Material readStoredFood(BlockState state) {
+        String value = state.getPersistentDataContainer().get(storedFoodKey, PersistentDataType.STRING);
+        if (value == null) return null;
+        return Material.matchMaterial(value);
+    }
+
+    private void clearStoredFood(BlockState state) {
+        state.getPersistentDataContainer().remove(storedFoodKey);
+        state.update(true, false);
+    }
+
     private void replaceOneMainHandItem(Player player, ItemStack replacement) {
         ItemStack hand = player.getInventory().getItemInMainHand();
         if (hand.getAmount() <= 1) {
@@ -117,10 +171,7 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
         addConfiguredDrop(event, section, "meat", meatMaterial(animal));
         addConfiguredDrop(event, section, "leather", Material.LEATHER);
         addConfiguredDrop(event, section, "bone", Material.BONE);
-
-        if (animal.equals("sheep")) {
-            addConfiguredDrop(event, section, "wool", Material.WHITE_WOOL);
-        }
+        if (animal.equals("sheep")) addConfiguredDrop(event, section, "wool", Material.WHITE_WOOL);
     }
 
     private Material meatMaterial(String animal) {
@@ -154,16 +205,19 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
             for (var chunk : world.getLoadedChunks()) {
                 for (BlockState state : chunk.getTileEntities()) {
                     if (state.getType() != Material.COMPOSTER) continue;
-                    if (!(state.getBlockData() instanceof Composter)) continue;
-                    feedFromComposter(state.getLocation());
+                    feedFromComposter(state);
                 }
             }
         }
     }
 
-    private void feedFromComposter(org.bukkit.Location location) {
+    private void feedFromComposter(BlockState state) {
+        Material food = readStoredFood(state);
+        if (food == null) return;
+
         int radius = Math.max(1, getConfig().getInt("automatic-feeder.radius", 8));
         int maxAnimals = Math.max(1, getConfig().getInt("automatic-feeder.max-animals", 16));
+        org.bukkit.Location location = state.getLocation().add(0.5, 0.5, 0.5);
 
         List<Animals> animals = location.getWorld().getNearbyEntities(location, radius, radius, radius).stream()
                 .filter(entity -> entity instanceof Animals)
@@ -173,81 +227,28 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
                 .limit(maxAnimals)
                 .toList();
 
-        if (animals.isEmpty()) return;
-        if (!(location.getBlock().getState() instanceof BlockState state)) return;
-        if (!(state instanceof org.bukkit.block.BlockState)) return;
-
         for (Animals animal : animals) {
-            Material food = findFoodForAnimal(animal, location);
-            if (food == null) continue;
-            if (!removeOneFoodFromNearbyContainer(location, food)) continue;
-            if (animal.isAdult()) {
-                if (animal.canBreed()) animal.setBreed(true);
-            } else {
-                animal.setAge(0);
-            }
+            if (!canFeed(animal, food)) continue;
+            if (animal.isAdult()) animal.setBreed(true);
+            else animal.setAge(0);
+            clearStoredFood(state);
+            return;
         }
     }
 
     private boolean eligibleForAutomaticFeeding(Animals animal) {
-        if (!animal.isAdult()) return true;
-        return animal.canBreed();
+        return !animal.isAdult() || animal.canBreed();
     }
 
-    private Material findFoodForAnimal(Animals animal, org.bukkit.Location location) {
+    private boolean canFeed(Animals animal, Material food) {
         String key = null;
         if (animal instanceof Cow) key = "cow";
         else if (animal instanceof Sheep) key = "sheep";
         else if (animal instanceof Goat) key = "goat";
         else if (animal instanceof Chicken) key = "chicken";
-        if (key == null || !getConfig().getBoolean("feeding." + key + ".enabled", true)) return null;
+        if (key == null || !getConfig().getBoolean("feeding." + key + ".enabled", true)) return false;
 
-        for (String foodName : getConfig().getStringList("feeding." + key + ".foods")) {
-            Material material = Material.matchMaterial(foodName);
-            if (material != null && hasFoodInNearbyContainer(location, material)) return material;
-        }
-        return null;
-    }
-
-    private boolean hasFoodInNearbyContainer(org.bukkit.Location location, Material material) {
-        // По умолчанию предметы ищутся в самом компостере через внутренний инвентарь только там,
-        // где сервер предоставляет Container. Для ванильного компостера это специально не используется.
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dy = -1; dy <= 1; dy++) {
-                for (int dz = -1; dz <= 1; dz++) {
-                    var block = location.getWorld().getBlockAt(location.getBlockX() + dx, location.getBlockY() + dy, location.getBlockZ() + dz);
-                    if (block.getState() instanceof Container container) {
-                        if (contains(container, material)) return true;
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
-    private boolean removeOneFoodFromNearbyContainer(org.bukkit.Location location, Material material) {
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dy = -1; dy <= 1; dy++) {
-                for (int dz = -1; dz <= 1; dz++) {
-                    var block = location.getWorld().getBlockAt(location.getBlockX() + dx, location.getBlockY() + dy, location.getBlockZ() + dz);
-                    if (!(block.getState() instanceof Container container)) continue;
-                    for (int slot = 0; slot < container.getInventory().getSize(); slot++) {
-                        ItemStack stack = container.getInventory().getItem(slot);
-                        if (stack == null || stack.getType() != material) continue;
-                        if (stack.getAmount() <= 1) container.getInventory().setItem(slot, null);
-                        else stack.setAmount(stack.getAmount() - 1);
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
-    private boolean contains(Container container, Material material) {
-        for (ItemStack stack : container.getInventory().getContents()) {
-            if (stack != null && stack.getType() == material && stack.getAmount() > 0) return true;
-        }
-        return false;
+        return getConfig().getStringList("feeding." + key + ".foods").stream()
+                .anyMatch(name -> name.equalsIgnoreCase(food.name()));
     }
 }
