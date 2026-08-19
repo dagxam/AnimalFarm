@@ -48,14 +48,14 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
     @Override
     public void onEnable() {
         saveDefaultConfig();
-
         feederItemKey = new NamespacedKey(this, "feeder_item");
         feederBlockKey = new NamespacedKey(this, "feeder_block");
         waterKey = new NamespacedKey(this, "water_units");
 
         getServer().getPluginManager().registerEvents(this, this);
-        Objects.requireNonNull(getCommand("animalfarm")).setExecutor(new AnimalFarmCommand(this));
-        Objects.requireNonNull(getCommand("animalfarm")).setTabCompleter(new AnimalFarmCommand(this));
+        AnimalFarmCommand command = new AnimalFarmCommand(this);
+        Objects.requireNonNull(getCommand("animalfarm")).setExecutor(command);
+        Objects.requireNonNull(getCommand("animalfarm")).setTabCompleter(command);
 
         registerFeederRecipe();
         startFeederTask();
@@ -78,7 +78,6 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
     private void registerFeederRecipe() {
         NamespacedKey key = new NamespacedKey(this, "feeder");
         getServer().removeRecipe(key);
-
         ShapedRecipe recipe = new ShapedRecipe(key, createFeederItem());
         recipe.shape("BB", "BB");
         recipe.setIngredient('B', Material.BARREL);
@@ -90,7 +89,7 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
         ItemMeta meta = item.getItemMeta();
         meta.setDisplayName(color("&6Кормушка"));
         meta.setLore(List.of(
-                color("&7Специальная бочка для животноводства."),
+                color("&7Внешне это обычная бочка."),
                 color("&7Установите её внутри закрытого загона."),
                 color("&7Для работы нужны корм и вода."),
                 color("&8AnimalFarm")
@@ -108,20 +107,19 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
     private boolean isFeederBlock(Block block) {
         if (block.getType() != Material.BARREL) return false;
         BlockState state = block.getState();
-        return state.getPersistentDataContainer().has(feederBlockKey, PersistentDataType.BYTE);
+        if (!(state instanceof Barrel barrel)) return false;
+        return barrel.getPersistentDataContainer().has(feederBlockKey, PersistentDataType.BYTE);
     }
 
     @EventHandler(ignoreCancelled = true)
     public void onFeederPlace(BlockPlaceEvent event) {
         if (!isFeederItem(event.getItemInHand())) return;
+        if (!(event.getBlockPlaced().getState() instanceof Barrel barrel)) return;
 
-        BlockState state = event.getBlockPlaced().getState();
-        state.getPersistentDataContainer().set(feederBlockKey, PersistentDataType.BYTE, (byte) 1);
-        state.getPersistentDataContainer().set(waterKey, PersistentDataType.INTEGER, 0);
-        if (state instanceof Barrel barrel) {
-            barrel.setCustomName("Кормушка");
-        }
-        state.update(true, false);
+        barrel.getPersistentDataContainer().set(feederBlockKey, PersistentDataType.BYTE, (byte) 1);
+        barrel.getPersistentDataContainer().set(waterKey, PersistentDataType.INTEGER, 0);
+        barrel.setCustomName("Кормушка");
+        barrel.update(true, false);
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -140,9 +138,8 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
         }
 
         int water = getWater(barrel);
-        if (water > 0) {
-            ItemStack buckets = new ItemStack(Material.BUCKET, water);
-            event.getBlock().getWorld().dropItemNaturally(event.getBlock().getLocation(), buckets);
+        for (int i = 0; i < water; i++) {
+            event.getBlock().getWorld().dropItemNaturally(event.getBlock().getLocation(), new ItemStack(Material.BUCKET));
         }
     }
 
@@ -164,7 +161,6 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
                 player.sendMessage(message("prefix") + message("water-full"));
                 return;
             }
-
             setWater(barrel, current + 1);
             removeOneMainHandItem(player);
             giveItem(player, new ItemStack(Material.BUCKET));
@@ -172,7 +168,6 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
             return;
         }
 
-        // Если игрок открывает кормушку пустой рукой, показываем её состояние.
         if (hand.getType() == Material.AIR) {
             PenStatus status = analyzePen(block.getLocation());
             player.sendMessage(message("prefix") + formatStatus(status));
@@ -182,7 +177,6 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
     @EventHandler(ignoreCancelled = true)
     public void onMilking(PlayerInteractEntityEvent event) {
         if (event.getHand() != EquipmentSlot.HAND) return;
-
         Entity entity = event.getRightClicked();
         Player player = event.getPlayer();
         ItemStack hand = player.getInventory().getItemInMainHand();
@@ -218,7 +212,6 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
     public void onDeath(EntityDeathEvent event) {
         String animal = getAnimalKey(event.getEntity());
         if (animal == null) return;
-
         ConfigurationSection section = getConfig().getConfigurationSection("drops." + animal);
         if (section == null) return;
 
@@ -232,11 +225,7 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
     public void onFeederInventoryClick(InventoryClickEvent event) {
         if (!(event.getInventory().getHolder() instanceof Barrel barrel)) return;
         if (!isFeederBlock(barrel.getBlock())) return;
-        // Вода добавляется отдельным действием через ведро. Пустые вёдра в инвентарь кормушки не нужны.
-        ItemStack cursor = event.getCursor();
-        if (cursor.getType() == Material.WATER_BUCKET) {
-            event.setCancelled(true);
-        }
+        if (event.getCursor().getType() == Material.WATER_BUCKET) event.setCancelled(true);
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -271,19 +260,19 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
 
     private void processFeeder(Barrel barrel) {
         PenStatus pen = analyzePen(barrel.getLocation());
-        if (!pen.valid()) return;
-        if (pen.animals().isEmpty()) return;
+        if (!pen.valid() || pen.animals().isEmpty()) return;
 
         int water = getWater(barrel);
         if (water <= 0) return;
 
         int maxPairs = Math.max(1, getConfig().getInt("feeder.max-births-per-cycle", 1));
         int births = 0;
-
         Map<String, List<Animals>> byType = new HashMap<>();
+
         for (Animals animal : pen.animals()) {
             if (!animal.isAdult() || !animal.canBreed()) continue;
-            byType.computeIfAbsent(getAnimalKey(animal), key -> new ArrayList<>()).add(animal);
+            String type = getAnimalKey(animal);
+            if (type != null) byType.computeIfAbsent(type, key -> new ArrayList<>()).add(animal);
         }
 
         for (List<Animals> group : byType.values()) {
@@ -294,11 +283,11 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
                 if (food == null) continue;
 
                 removeOneFood(barrel.getInventory(), food);
-                setWater(barrel, water - 1);
+                water--;
+                setWater(barrel, water);
                 first.setBreed(true);
                 second.setBreed(true);
                 births++;
-                water--;
             }
             if (births >= maxPairs || water <= 0) break;
         }
@@ -337,9 +326,7 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
         ArrayDeque<int[]> queue = new ArrayDeque<>();
         queue.add(new int[]{feeder.getBlockX(), feeder.getBlockZ()});
         inside.add(key(feeder.getBlockX(), feeder.getBlockZ()));
-
         boolean escaped = false;
-        int gateCount = 0;
         Set<String> countedGates = new HashSet<>();
 
         while (!queue.isEmpty()) {
@@ -368,13 +355,14 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
             }
         }
 
-        gateCount = countedGates.size();
+        int gateCount = countedGates.size();
         boolean closed = !escaped && gateCount == 1;
-
         List<Animals> animals = new ArrayList<>();
+
         if (closed) {
             double radius = maxRadius + 0.5;
-            for (Entity entity : feeder.getWorld().getNearbyEntities(feeder.clone().add(0.5, 0.5, 0.5), radius, 3, radius)) {
+            Location center = feeder.clone().add(0.5, 0.5, 0.5);
+            for (Entity entity : feeder.getWorld().getNearbyEntities(center, radius, 3, radius)) {
                 if (!(entity instanceof Animals animal)) continue;
                 String animalKey = key(animal.getLocation().getBlockX(), animal.getLocation().getBlockZ());
                 if (inside.contains(animalKey)) animals.add(animal);
@@ -420,8 +408,7 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
     private Material meatMaterial(String animal) {
         return switch (animal) {
             case "cow" -> Material.BEEF;
-            case "sheep" -> Material.MUTTON;
-            case "goat" -> Material.MUTTON;
+            case "sheep", "goat" -> Material.MUTTON;
             default -> Material.BEEF;
         };
     }
@@ -447,10 +434,6 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
     private void giveItem(Player player, ItemStack item) {
         Map<Integer, ItemStack> leftovers = player.getInventory().addItem(item);
         leftovers.values().forEach(leftover -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
-    }
-
-    private void giveItem(Player player, Material material) {
-        giveItem(player, new ItemStack(material));
     }
 
     private String getAnimalKey(Entity entity) {
