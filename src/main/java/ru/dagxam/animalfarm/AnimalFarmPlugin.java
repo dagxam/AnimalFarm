@@ -106,8 +106,7 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
 
     private boolean isFeederBlock(Block block) {
         if (block.getType() != Material.BARREL) return false;
-        BlockState state = block.getState();
-        if (!(state instanceof Barrel barrel)) return false;
+        if (!(block.getState() instanceof Barrel barrel)) return false;
         return barrel.getPersistentDataContainer().has(feederBlockKey, PersistentDataType.BYTE);
     }
 
@@ -170,7 +169,7 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
 
         if (hand.getType() == Material.AIR) {
             PenStatus status = analyzePen(block.getLocation());
-            player.sendMessage(message("prefix") + formatStatus(status));
+            player.sendMessage(message("prefix") + formatStatus(status, (Barrel) block.getState()));
         }
     }
 
@@ -211,21 +210,23 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
     @EventHandler(ignoreCancelled = true)
     public void onDeath(EntityDeathEvent event) {
         String animal = getAnimalKey(event.getEntity());
-        if (animal == null) return;
+        if (animal == null || animal.equals("chicken")) return;
         ConfigurationSection section = getConfig().getConfigurationSection("drops." + animal);
         if (section == null) return;
 
-        addConfiguredDrop(event, section, "meat", meatMaterial(animal));
-        addConfiguredDrop(event, section, "leather", Material.LEATHER);
-        addConfiguredDrop(event, section, "bone", Material.BONE);
-        if (animal.equals("sheep")) addConfiguredDrop(event, section, "wool", Material.WHITE_WOOL);
+        addConfiguredDrop(event, section, "meat", meatItem(animal));
+        addConfiguredDrop(event, section, "leather", new ItemStack(Material.LEATHER));
+        addConfiguredDrop(event, section, "bone", new ItemStack(Material.BONE));
+        if (animal.equals("sheep")) addConfiguredDrop(event, section, "wool", new ItemStack(Material.WHITE_WOOL));
     }
 
     @EventHandler(ignoreCancelled = true)
     public void onFeederInventoryClick(InventoryClickEvent event) {
         if (!(event.getInventory().getHolder() instanceof Barrel barrel)) return;
         if (!isFeederBlock(barrel.getBlock())) return;
-        if (event.getCursor().getType() == Material.WATER_BUCKET) event.setCancelled(true);
+        if (event.getCursor().getType() == Material.WATER_BUCKET || event.getCurrentItem() != null && event.getCurrentItem().getType() == Material.WATER_BUCKET) {
+            event.setCancelled(true);
+        }
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -384,11 +385,32 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
         return !gate.isOpen();
     }
 
-    private String formatStatus(PenStatus status) {
+    private String formatStatus(PenStatus status, Barrel barrel) {
         if (status.escaped()) return message("pen-open");
         if (status.gateCount() == 0) return message("pen-no-gate");
         if (status.gateCount() > 1) return message("pen-many-gates");
-        return message("pen-ready").replace("%animals%", String.valueOf(status.animals().size()));
+
+        int wheat = count(barrel.getInventory(), Material.WHEAT);
+        int seeds = count(barrel.getInventory(), Material.WHEAT_SEEDS)
+                + count(barrel.getInventory(), Material.BEETROOT_SEEDS)
+                + count(barrel.getInventory(), Material.PUMPKIN_SEEDS)
+                + count(barrel.getInventory(), Material.MELON_SEEDS)
+                + count(barrel.getInventory(), Material.TORCHFLOWER_SEEDS)
+                + count(barrel.getInventory(), Material.PITCHER_POD);
+
+        return message("pen-ready")
+                .replace("%animals%", String.valueOf(status.animals().size()))
+                .replace("%water%", String.valueOf(getWater(barrel)))
+                .replace("%wheat%", String.valueOf(wheat))
+                .replace("%seeds%", String.valueOf(seeds));
+    }
+
+    private int count(Inventory inventory, Material material) {
+        int total = 0;
+        for (ItemStack item : inventory.getContents()) {
+            if (item != null && item.getType() == material) total += item.getAmount();
+        }
+        return total;
     }
 
     private String key(int x, int z) {
@@ -405,19 +427,32 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
         barrel.update(true, false);
     }
 
-    private Material meatMaterial(String animal) {
-        return switch (animal) {
-            case "cow" -> Material.BEEF;
-            case "sheep", "goat" -> Material.MUTTON;
-            default -> Material.BEEF;
-        };
+    private ItemStack meatItem(String animal) {
+        Material material = animal.equals("cow") ? Material.BEEF : Material.MUTTON;
+        ItemStack item = new ItemStack(material);
+        if (animal.equals("goat")) {
+            ItemMeta meta = item.getItemMeta();
+            meta.setDisplayName(color("&fКозлятина"));
+            item.setItemMeta(meta);
+        }
+        return item;
     }
 
-    private void addConfiguredDrop(EntityDeathEvent event, ConfigurationSection section, String key, Material material) {
+    private void addConfiguredDrop(EntityDeathEvent event, ConfigurationSection section, String key, ItemStack item) {
         int min = Math.max(0, section.getInt(key + ".min", 0));
         int max = Math.max(min, section.getInt(key + ".max", min));
         int amount = ThreadLocalRandom.current().nextInt(min, max + 1);
-        if (amount > 0) event.getDrops().add(new ItemStack(material, amount));
+        if (amount <= 0) return;
+        item.setAmount(Math.min(amount, item.getMaxStackSize()));
+        event.getDrops().add(item);
+        int remaining = amount - item.getAmount();
+        while (remaining > 0) {
+            int next = Math.min(remaining, item.getMaxStackSize());
+            ItemStack extra = item.clone();
+            extra.setAmount(next);
+            event.getDrops().add(extra);
+            remaining -= next;
+        }
     }
 
     private void replaceOneMainHandItem(Player player, ItemStack replacement) {
