@@ -1,9 +1,10 @@
 name: AnimalFarm
-version: 1.1.0
+version: 1.0.0
 author: dagxam
 main: ru.dagxam.animalfarm.AnimalFarmPlugin
-api-version: '1.21'
-description: Система животноводства, кормушек и автоматических загонов.
+api-version: '26.2'
+description: Расширенная система животноводства, кормушек и автоматических загонов.
+website: https://github.com/dagxam/AnimalFarm
 
 commands:
   animalfarm:
