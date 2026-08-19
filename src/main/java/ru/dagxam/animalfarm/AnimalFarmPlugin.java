@@ -1,9 +1,14 @@
 package ru.dagxam.animalfarm;
 
 import org.bukkit.ChatColor;
+import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.World;
+import org.bukkit.block.Barrel;
+import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
-import org.bukkit.block.data.type.Composter;
+import org.bukkit.block.data.type.FenceGate;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Animals;
 import org.bukkit.entity.Chicken;
@@ -14,14 +19,19 @@ import org.bukkit.entity.Player;
 import org.bukkit.entity.Sheep;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.Action;
-import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.event.player.PlayerInteractEntityEvent;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.player.PlayerInteractBlockEvent;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.ShapedRecipe;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
-import org.bukkit.NamespacedKey;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
@@ -31,16 +41,23 @@ import java.util.concurrent.ThreadLocalRandom;
 public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
 
     private final Map<UUID, Long> milkingCooldown = new HashMap<>();
-    private NamespacedKey storedFoodKey;
+    private NamespacedKey feederItemKey;
+    private NamespacedKey feederBlockKey;
+    private NamespacedKey waterKey;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
-        storedFoodKey = new NamespacedKey(this, "stored_food");
+
+        feederItemKey = new NamespacedKey(this, "feeder_item");
+        feederBlockKey = new NamespacedKey(this, "feeder_block");
+        waterKey = new NamespacedKey(this, "water_units");
+
         getServer().getPluginManager().registerEvents(this, this);
-        AnimalFarmCommand command = new AnimalFarmCommand(this);
-        Objects.requireNonNull(getCommand("animalfarm")).setExecutor(command);
-        Objects.requireNonNull(getCommand("animalfarm")).setTabCompleter(command);
+        Objects.requireNonNull(getCommand("animalfarm")).setExecutor(new AnimalFarmCommand(this));
+        Objects.requireNonNull(getCommand("animalfarm")).setTabCompleter(new AnimalFarmCommand(this));
+
+        registerFeederRecipe();
         startFeederTask();
         getLogger().info("AnimalFarm включён.");
     }
@@ -58,8 +75,112 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
         return ChatColor.translateAlternateColorCodes('&', getConfig().getString("messages." + path, ""));
     }
 
+    private void registerFeederRecipe() {
+        NamespacedKey key = new NamespacedKey(this, "feeder");
+        getServer().removeRecipe(key);
+
+        ShapedRecipe recipe = new ShapedRecipe(key, createFeederItem());
+        recipe.shape("BB", "BB");
+        recipe.setIngredient('B', Material.BARREL);
+        getServer().addRecipe(recipe);
+    }
+
+    public ItemStack createFeederItem() {
+        ItemStack item = new ItemStack(Material.BARREL);
+        ItemMeta meta = item.getItemMeta();
+        meta.setDisplayName(color("&6Кормушка"));
+        meta.setLore(List.of(
+                color("&7Специальная бочка для животноводства."),
+                color("&7Установите её внутри закрытого загона."),
+                color("&7Для работы нужны корм и вода."),
+                color("&8AnimalFarm")
+        ));
+        meta.getPersistentDataContainer().set(feederItemKey, PersistentDataType.BYTE, (byte) 1);
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    private boolean isFeederItem(ItemStack item) {
+        if (item == null || item.getType() != Material.BARREL || !item.hasItemMeta()) return false;
+        return item.getItemMeta().getPersistentDataContainer().has(feederItemKey, PersistentDataType.BYTE);
+    }
+
+    private boolean isFeederBlock(Block block) {
+        if (block.getType() != Material.BARREL) return false;
+        BlockState state = block.getState();
+        return state.getPersistentDataContainer().has(feederBlockKey, PersistentDataType.BYTE);
+    }
+
     @EventHandler(ignoreCancelled = true)
-    public void onMilk(PlayerInteractEntityEvent event) {
+    public void onFeederPlace(BlockPlaceEvent event) {
+        if (!isFeederItem(event.getItemInHand())) return;
+
+        BlockState state = event.getBlockPlaced().getState();
+        state.getPersistentDataContainer().set(feederBlockKey, PersistentDataType.BYTE, (byte) 1);
+        state.getPersistentDataContainer().set(waterKey, PersistentDataType.INTEGER, 0);
+        if (state instanceof Barrel barrel) {
+            barrel.setCustomName("Кормушка");
+        }
+        state.update(true, false);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onFeederBreak(BlockBreakEvent event) {
+        if (!isFeederBlock(event.getBlock())) return;
+
+        event.setDropItems(false);
+        Barrel barrel = (Barrel) event.getBlock().getState();
+        Inventory inventory = barrel.getInventory();
+
+        event.getBlock().getWorld().dropItemNaturally(event.getBlock().getLocation(), createFeederItem());
+        for (ItemStack item : inventory.getContents()) {
+            if (item != null && item.getType() != Material.AIR) {
+                event.getBlock().getWorld().dropItemNaturally(event.getBlock().getLocation(), item.clone());
+            }
+        }
+
+        int water = getWater(barrel);
+        if (water > 0) {
+            ItemStack buckets = new ItemStack(Material.BUCKET, water);
+            event.getBlock().getWorld().dropItemNaturally(event.getBlock().getLocation(), buckets);
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onFeederInteract(PlayerInteractBlockEvent event) {
+        if (event.getHand() != EquipmentSlot.HAND) return;
+        Block block = event.getBlock();
+        if (!isFeederBlock(block)) return;
+
+        Player player = event.getPlayer();
+        ItemStack hand = player.getInventory().getItemInMainHand();
+
+        if (hand.getType() == Material.WATER_BUCKET) {
+            event.setCancelled(true);
+            Barrel barrel = (Barrel) block.getState();
+            int maxWater = Math.max(1, getConfig().getInt("feeder.max-water", 64));
+            int current = getWater(barrel);
+            if (current >= maxWater) {
+                player.sendMessage(message("prefix") + message("water-full"));
+                return;
+            }
+
+            setWater(barrel, current + 1);
+            removeOneMainHandItem(player);
+            giveItem(player, new ItemStack(Material.BUCKET));
+            player.sendMessage(message("prefix") + message("water-added"));
+            return;
+        }
+
+        // Если игрок открывает кормушку пустой рукой, показываем её состояние.
+        if (hand.getType() == Material.AIR) {
+            PenStatus status = analyzePen(block.getLocation());
+            player.sendMessage(message("prefix") + formatStatus(status));
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onMilking(PlayerInteractEntityEvent event) {
         if (event.getHand() != EquipmentSlot.HAND) return;
 
         Entity entity = event.getRightClicked();
@@ -94,73 +215,6 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
     }
 
     @EventHandler(ignoreCancelled = true)
-    public void onComposterInteract(PlayerInteractEvent event) {
-        if (event.getHand() != EquipmentSlot.HAND || event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
-        if (event.getClickedBlock() == null || event.getClickedBlock().getType() != Material.COMPOSTER) return;
-        if (!getConfig().getBoolean("automatic-feeder.enabled", true)) return;
-
-        Player player = event.getPlayer();
-        ItemStack hand = player.getInventory().getItemInMainHand();
-        Material food = resolveAcceptedFood(hand.getType());
-        if (food == null) return;
-
-        event.setCancelled(true);
-        Composter composter = (Composter) event.getClickedBlock().getBlockData();
-        int level = composter.getLevel();
-        if (level >= 7) return;
-
-        storeFood(event.getClickedBlock().getState(), food);
-        if (hand.getAmount() > 1) hand.setAmount(hand.getAmount() - 1);
-        else player.getInventory().setItemInMainHand(null);
-
-        composter.setLevel(level + 1);
-        event.getClickedBlock().setBlockData(composter);
-    }
-
-    private Material resolveAcceptedFood(Material material) {
-        if (material == Material.WHEAT) return Material.WHEAT;
-        if (material == Material.WHEAT_SEEDS || material == Material.BEETROOT_SEEDS || material == Material.PUMPKIN_SEEDS || material == Material.MELON_SEEDS) {
-            return material;
-        }
-        return null;
-    }
-
-    private void storeFood(BlockState state, Material food) {
-        String existing = state.getPersistentDataContainer().get(storedFoodKey, PersistentDataType.STRING);
-        if (existing == null) state.getPersistentDataContainer().set(storedFoodKey, PersistentDataType.STRING, food.name());
-        state.update(true, false);
-    }
-
-    private Material readStoredFood(BlockState state) {
-        String value = state.getPersistentDataContainer().get(storedFoodKey, PersistentDataType.STRING);
-        if (value == null) return null;
-        return Material.matchMaterial(value);
-    }
-
-    private void clearStoredFood(BlockState state) {
-        state.getPersistentDataContainer().remove(storedFoodKey);
-        state.update(true, false);
-    }
-
-    private void replaceOneMainHandItem(Player player, ItemStack replacement) {
-        ItemStack hand = player.getInventory().getItemInMainHand();
-        if (hand.getAmount() <= 1) {
-            player.getInventory().setItemInMainHand(replacement);
-            return;
-        }
-        hand.setAmount(hand.getAmount() - 1);
-        Map<Integer, ItemStack> leftovers = player.getInventory().addItem(replacement);
-        leftovers.values().forEach(item -> player.getWorld().dropItemNaturally(player.getLocation(), item));
-    }
-
-    private String getAnimalKey(Entity entity) {
-        if (entity instanceof Cow) return "cow";
-        if (entity instanceof Sheep) return "sheep";
-        if (entity instanceof Goat) return "goat";
-        return null;
-    }
-
-    @EventHandler(ignoreCancelled = true)
     public void onDeath(EntityDeathEvent event) {
         String animal = getAnimalKey(event.getEntity());
         if (animal == null) return;
@@ -172,6 +226,195 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
         addConfiguredDrop(event, section, "leather", Material.LEATHER);
         addConfiguredDrop(event, section, "bone", Material.BONE);
         if (animal.equals("sheep")) addConfiguredDrop(event, section, "wool", Material.WHITE_WOOL);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onFeederInventoryClick(InventoryClickEvent event) {
+        if (!(event.getInventory().getHolder() instanceof Barrel barrel)) return;
+        if (!isFeederBlock(barrel.getBlock())) return;
+        // Вода добавляется отдельным действием через ведро. Пустые вёдра в инвентарь кормушки не нужны.
+        ItemStack cursor = event.getCursor();
+        if (cursor.getType() == Material.WATER_BUCKET) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onFeederInventoryDrag(InventoryDragEvent event) {
+        if (!(event.getInventory().getHolder() instanceof Barrel barrel)) return;
+        if (!isFeederBlock(barrel.getBlock())) return;
+        if (event.getOldCursor().getType() == Material.WATER_BUCKET) event.setCancelled(true);
+    }
+
+    private void startFeederTask() {
+        long interval = Math.max(20L, getConfig().getLong("feeder.interval-seconds", 5L) * 20L);
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (!getConfig().getBoolean("feeder.enabled", true)) return;
+                processLoadedFeeders();
+            }
+        }.runTaskTimer(this, interval, interval);
+    }
+
+    private void processLoadedFeeders() {
+        for (World world : getServer().getWorlds()) {
+            for (var chunk : world.getLoadedChunks()) {
+                for (BlockState state : chunk.getTileEntities()) {
+                    if (!(state instanceof Barrel barrel)) continue;
+                    if (!isFeederBlock(barrel.getBlock())) continue;
+                    processFeeder(barrel);
+                }
+            }
+        }
+    }
+
+    private void processFeeder(Barrel barrel) {
+        PenStatus pen = analyzePen(barrel.getLocation());
+        if (!pen.valid()) return;
+        if (pen.animals().isEmpty()) return;
+
+        int water = getWater(barrel);
+        if (water <= 0) return;
+
+        int maxPairs = Math.max(1, getConfig().getInt("feeder.max-births-per-cycle", 1));
+        int births = 0;
+
+        Map<String, List<Animals>> byType = new HashMap<>();
+        for (Animals animal : pen.animals()) {
+            if (!animal.isAdult() || !animal.canBreed()) continue;
+            byType.computeIfAbsent(getAnimalKey(animal), key -> new ArrayList<>()).add(animal);
+        }
+
+        for (List<Animals> group : byType.values()) {
+            for (int i = 0; i + 1 < group.size() && births < maxPairs; i += 2) {
+                Animals first = group.get(i);
+                Animals second = group.get(i + 1);
+                Material food = findFoodFor(first, barrel.getInventory());
+                if (food == null) continue;
+
+                removeOneFood(barrel.getInventory(), food);
+                setWater(barrel, water - 1);
+                first.setBreed(true);
+                second.setBreed(true);
+                births++;
+                water--;
+            }
+            if (births >= maxPairs || water <= 0) break;
+        }
+    }
+
+    private Material findFoodFor(Animals animal, Inventory inventory) {
+        String key = getAnimalKey(animal);
+        if (key == null) return null;
+        for (String configured : getConfig().getStringList("feeding." + key + ".foods")) {
+            Material material = Material.matchMaterial(configured);
+            if (material != null && contains(inventory, material)) return material;
+        }
+        return null;
+    }
+
+    private boolean contains(Inventory inventory, Material material) {
+        for (ItemStack item : inventory.getContents()) {
+            if (item != null && item.getType() == material && item.getAmount() > 0) return true;
+        }
+        return false;
+    }
+
+    private void removeOneFood(Inventory inventory, Material material) {
+        for (int slot = 0; slot < inventory.getSize(); slot++) {
+            ItemStack item = inventory.getItem(slot);
+            if (item == null || item.getType() != material) continue;
+            if (item.getAmount() <= 1) inventory.setItem(slot, null);
+            else item.setAmount(item.getAmount() - 1);
+            return;
+        }
+    }
+
+    private PenStatus analyzePen(Location feeder) {
+        int maxRadius = Math.max(4, getConfig().getInt("pen.max-radius", 16));
+        Set<String> inside = new HashSet<>();
+        ArrayDeque<int[]> queue = new ArrayDeque<>();
+        queue.add(new int[]{feeder.getBlockX(), feeder.getBlockZ()});
+        inside.add(key(feeder.getBlockX(), feeder.getBlockZ()));
+
+        boolean escaped = false;
+        int gateCount = 0;
+        Set<String> countedGates = new HashSet<>();
+
+        while (!queue.isEmpty()) {
+            int[] point = queue.removeFirst();
+            int x = point[0];
+            int z = point[1];
+
+            if (Math.abs(x - feeder.getBlockX()) > maxRadius || Math.abs(z - feeder.getBlockZ()) > maxRadius) {
+                escaped = true;
+                continue;
+            }
+
+            for (int[] direction : DIRECTIONS) {
+                int nx = x + direction[0];
+                int nz = z + direction[1];
+                Block next = feeder.getWorld().getBlockAt(nx, feeder.getBlockY(), nz);
+
+                if (isGate(next)) {
+                    countedGates.add(key(nx, nz));
+                    continue;
+                }
+                if (isFence(next)) continue;
+
+                String nextKey = key(nx, nz);
+                if (inside.add(nextKey)) queue.addLast(new int[]{nx, nz});
+            }
+        }
+
+        gateCount = countedGates.size();
+        boolean closed = !escaped && gateCount == 1;
+
+        List<Animals> animals = new ArrayList<>();
+        if (closed) {
+            double radius = maxRadius + 0.5;
+            for (Entity entity : feeder.getWorld().getNearbyEntities(feeder.clone().add(0.5, 0.5, 0.5), radius, 3, radius)) {
+                if (!(entity instanceof Animals animal)) continue;
+                String animalKey = key(animal.getLocation().getBlockX(), animal.getLocation().getBlockZ());
+                if (inside.contains(animalKey)) animals.add(animal);
+            }
+        }
+
+        return new PenStatus(closed, gateCount, animals, escaped);
+    }
+
+    private static final int[][] DIRECTIONS = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+
+    private boolean isFence(Block block) {
+        return block.getType().name().endsWith("_FENCE");
+    }
+
+    private boolean isGate(Block block) {
+        if (!block.getType().name().endsWith("_FENCE_GATE")) return false;
+        if (!(block.getBlockData() instanceof FenceGate gate)) return true;
+        return !gate.isOpen();
+    }
+
+    private String formatStatus(PenStatus status) {
+        if (status.escaped()) return message("pen-open");
+        if (status.gateCount() == 0) return message("pen-no-gate");
+        if (status.gateCount() > 1) return message("pen-many-gates");
+        return message("pen-ready").replace("%animals%", String.valueOf(status.animals().size()));
+    }
+
+    private String key(int x, int z) {
+        return x + ":" + z;
+    }
+
+    private int getWater(Barrel barrel) {
+        Integer value = barrel.getPersistentDataContainer().get(waterKey, PersistentDataType.INTEGER);
+        return value == null ? 0 : Math.max(0, value);
+    }
+
+    private void setWater(Barrel barrel, int value) {
+        barrel.getPersistentDataContainer().set(waterKey, PersistentDataType.INTEGER, Math.max(0, value));
+        barrel.update(true, false);
     }
 
     private Material meatMaterial(String animal) {
@@ -190,65 +433,37 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
         if (amount > 0) event.getDrops().add(new ItemStack(material, amount));
     }
 
-    private void startFeederTask() {
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                if (!getConfig().getBoolean("automatic-feeder.enabled", true)) return;
-                feedAllLoadedFeeders();
-            }
-        }.runTaskTimer(this, 20L, Math.max(20L, getConfig().getLong("automatic-feeder.interval-seconds", 5L) * 20L));
+    private void replaceOneMainHandItem(Player player, ItemStack replacement) {
+        removeOneMainHandItem(player);
+        giveItem(player, replacement);
     }
 
-    private void feedAllLoadedFeeders() {
-        for (var world : getServer().getWorlds()) {
-            for (var chunk : world.getLoadedChunks()) {
-                for (BlockState state : chunk.getTileEntities()) {
-                    if (state.getType() != Material.COMPOSTER) continue;
-                    feedFromComposter(state);
-                }
-            }
-        }
+    private void removeOneMainHandItem(Player player) {
+        ItemStack hand = player.getInventory().getItemInMainHand();
+        if (hand.getAmount() <= 1) player.getInventory().setItemInMainHand(null);
+        else hand.setAmount(hand.getAmount() - 1);
     }
 
-    private void feedFromComposter(BlockState state) {
-        Material food = readStoredFood(state);
-        if (food == null) return;
-
-        int radius = Math.max(1, getConfig().getInt("automatic-feeder.radius", 8));
-        int maxAnimals = Math.max(1, getConfig().getInt("automatic-feeder.max-animals", 16));
-        org.bukkit.Location location = state.getLocation().add(0.5, 0.5, 0.5);
-
-        List<Animals> animals = location.getWorld().getNearbyEntities(location, radius, radius, radius).stream()
-                .filter(entity -> entity instanceof Animals)
-                .map(entity -> (Animals) entity)
-                .filter(this::eligibleForAutomaticFeeding)
-                .sorted(Comparator.comparingDouble(a -> a.getLocation().distanceSquared(location)))
-                .limit(maxAnimals)
-                .toList();
-
-        for (Animals animal : animals) {
-            if (!canFeed(animal, food)) continue;
-            if (animal.isAdult()) animal.setBreed(true);
-            else animal.setAge(0);
-            clearStoredFood(state);
-            return;
-        }
+    private void giveItem(Player player, ItemStack item) {
+        Map<Integer, ItemStack> leftovers = player.getInventory().addItem(item);
+        leftovers.values().forEach(leftover -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
     }
 
-    private boolean eligibleForAutomaticFeeding(Animals animal) {
-        return !animal.isAdult() || animal.canBreed();
+    private void giveItem(Player player, Material material) {
+        giveItem(player, new ItemStack(material));
     }
 
-    private boolean canFeed(Animals animal, Material food) {
-        String key = null;
-        if (animal instanceof Cow) key = "cow";
-        else if (animal instanceof Sheep) key = "sheep";
-        else if (animal instanceof Goat) key = "goat";
-        else if (animal instanceof Chicken) key = "chicken";
-        if (key == null || !getConfig().getBoolean("feeding." + key + ".enabled", true)) return false;
-
-        return getConfig().getStringList("feeding." + key + ".foods").stream()
-                .anyMatch(name -> name.equalsIgnoreCase(food.name()));
+    private String getAnimalKey(Entity entity) {
+        if (entity instanceof Cow) return "cow";
+        if (entity instanceof Sheep) return "sheep";
+        if (entity instanceof Goat) return "goat";
+        if (entity instanceof Chicken) return "chicken";
+        return null;
     }
+
+    private String color(String text) {
+        return ChatColor.translateAlternateColorCodes('&', text);
+    }
+
+    private record PenStatus(boolean valid, int gateCount, List<Animals> animals, boolean escaped) {}
 }
