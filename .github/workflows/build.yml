@@ -5,20 +5,32 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
+      - name: Получить исходный код
         uses: actions/checkout@v4
 
-      - name: Setup Java 21
-        uses: actions/setup-java@v4
+      - name: Установить Java 26
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '26'
           cache: maven
 
-      - name: Build
+      - name: Проверить Java
+        run: java -version
+
+      - name: Собрать плагин
         run: mvn -B clean package
+
+      - name: Загрузить JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: AnimalFarm
+          path: target/*.jar
+          if-no-files-found: error
