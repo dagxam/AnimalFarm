@@ -1,0 +1,100 @@
+# ============================================================
+# AnimalFarm — основная конфигурация
+# ============================================================
+
+# Автоматическая кормушка на базе ванильного компостера.
+automatic-feeder:
+  enabled: true
+
+  # Радиус поиска животных вокруг компостера.
+  radius: 8
+
+  # Интервал проверки в секундах.
+  interval-seconds: 5
+
+  # Максимальное количество взрослых животных в радиусе одного компостера.
+  max-animals: 16
+
+# Доение животных.
+milking:
+  enabled: true
+  cooldown-seconds: 30
+  animals:
+    cow: true
+    sheep: true
+    goat: true
+
+# Дроп животных.
+drops:
+  cow:
+    meat:
+      min: 1
+      max: 3
+    leather:
+      min: 0
+      max: 2
+    bone:
+      min: 0
+      max: 2
+
+  sheep:
+    meat:
+      min: 1
+      max: 3
+    leather:
+      min: 0
+      max: 2
+    wool:
+      min: 1
+      max: 3
+    bone:
+      min: 0
+      max: 2
+
+  goat:
+    meat:
+      min: 1
+      max: 2
+    leather:
+      min: 0
+      max: 2
+    bone:
+      min: 0
+      max: 2
+
+# Настройка корма для автоматической кормушки.
+feeding:
+  cow:
+    enabled: true
+    foods:
+      - WHEAT
+
+  sheep:
+    enabled: true
+    foods:
+      - WHEAT
+
+  goat:
+    enabled: true
+    foods:
+      - WHEAT
+
+  chicken:
+    enabled: true
+    # Любые стандартные семена, разрешённые конфигурацией.
+    foods:
+      - WHEAT_SEEDS
+      - BEETROOT_SEEDS
+      - PUMPKIN_SEEDS
+      - MELON_SEEDS
+
+# Сообщения игрокам.
+messages:
+  prefix: "&8[&6AnimalFarm&8] &r"
+  no-permission: "&cУ вас нет прав для выполнения этой команды."
+  reloaded: "&aКонфигурация успешно перезагружена."
+  info: "&fAnimalFarm &7— &eрасширенная фермерская система."
+  milk-cow: "&aВы надоили корову."
+  milk-sheep: "&aВы надоили барана."
+  milk-goat: "&aВы надоили козу."
+  milk-cooldown: "&eЭто животное пока не даёт молоко."
