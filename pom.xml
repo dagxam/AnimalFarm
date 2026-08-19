@@ -10,7 +10,8 @@
     <packaging>jar</packaging>
 
     <properties>
-        <maven.compiler.release>21</maven.compiler.release>
+        <!-- Paper 26.2 требует современный Java runtime. Проект собираем именно Java 26. -->
+        <maven.compiler.release>26</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -22,16 +23,27 @@
     </repositories>
 
     <dependencies>
+        <!-- Paper 26.2. Используем диапазон, чтобы GitHub Actions брал актуальный build 26.2. -->
         <dependency>
             <groupId>io.papermc.paper</groupId>
             <artifactId>paper-api</artifactId>
-            <version>1.21.8-R0.1-SNAPSHOT</version>
+            <version>[26.2.build,)</version>
             <scope>provided</scope>
         </dependency>
     </dependencies>
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.15.0</version>
+                <configuration>
+                    <release>26</release>
+                    <encoding>UTF-8</encoding>
+                </configuration>
+            </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
