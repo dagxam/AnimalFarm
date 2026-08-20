@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
+/** Автоматически собирает продукцию загона в сундук, установленный на заборе. */
 public final class ProductionChestManager implements Listener {
     private final JavaPlugin plugin;
     private final NamespacedKey feederKey;
@@ -90,6 +91,8 @@ public final class ProductionChestManager implements Listener {
         int milkMax = Math.max(milkMin, plugin.getConfig().getInt("production.chest.milk-max", 10));
         int woolMin = Math.max(0, plugin.getConfig().getInt("production.chest.wool-min", 1));
         int woolMax = Math.max(woolMin, plugin.getConfig().getInt("production.chest.wool-max", 2));
+        int eggMin = Math.max(5, plugin.getConfig().getInt("production.chest.egg-min", 5));
+        int eggMax = Math.max(eggMin, plugin.getConfig().getInt("production.chest.egg-max", 10));
 
         for (Entity entity : feeder.getBlock().getWorld().getNearbyEntities(feeder.getBlock().getLocation(), 18, 8, 18)) {
             if (!(entity instanceof Animals animal) || !animal.isAdult()) continue;
@@ -98,6 +101,9 @@ public final class ProductionChestManager implements Listener {
             }
             if (animal instanceof Sheep sheep) {
                 production.add(new ItemStack(woolMaterial(sheep), random(woolMin, woolMax)));
+            }
+            if (animal instanceof Chicken) {
+                production.add(new ItemStack(Material.EGG, random(eggMin, eggMax)));
             }
         }
 
@@ -150,9 +156,8 @@ public final class ProductionChestManager implements Listener {
         ItemStack item = event.getItemDrop().getItemStack();
         if (item.getType() != Material.EGG) return;
         Chest chest = findCollectionChestNearAnimal(chicken);
-        if (chest == null) return;
-        event.setCancelled(true);
-        chest.getBlockInventory().addItem(item.clone());
+        if (chest != null) event.setCancelled(true);
+        // Если сундука нет, ванильное яйцо остаётся на полу загона.
     }
 
     private Chest findCollectionChestNearAnimal(Chicken chicken) {
