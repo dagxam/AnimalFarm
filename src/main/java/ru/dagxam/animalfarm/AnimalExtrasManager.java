@@ -51,7 +51,7 @@ public final class AnimalExtrasManager implements Listener {
             event.getDrops().add(new ItemStack(Material.BONE, 2));
         } else if (event.getEntity() instanceof Rabbit) {
             event.getDrops().clear();
-            event.getDrops().add(new ItemStack(Material.RABBIT));
+            event.getDrops().add(named(Material.RABBIT, "&fКрольчатина"));
             event.getDrops().add(new ItemStack(Material.RABBIT_HIDE));
             event.getDrops().add(new ItemStack(Material.BONE));
         }
@@ -75,7 +75,6 @@ public final class AnimalExtrasManager implements Listener {
                     UUID id = animal.getUniqueId();
                     int seen = babyFeeds.getOrDefault(id, 0);
                     int pluginCount = animal.getPersistentDataContainer().getOrDefault(pluginMilkCountKey, PersistentDataType.INTEGER, 0);
-
                     if (!animal.isAdult()) {
                         animal.getPersistentDataContainer().set(guardKey, PersistentDataType.BYTE, (byte)1);
                         if (pluginCount > 0) seen = Math.max(seen, pluginCount);
@@ -83,20 +82,12 @@ public final class AnimalExtrasManager implements Listener {
                             animal.setAge(0);
                             babyFeeds.remove(id);
                             animal.getPersistentDataContainer().remove(guardKey);
-                        } else {
-                            babyFeeds.put(id, seen);
-                        }
+                        } else babyFeeds.put(id, seen);
                         continue;
                     }
-
                     if (!animal.getPersistentDataContainer().has(guardKey, PersistentDataType.BYTE)) continue;
-                    if (seen < required) {
-                        animal.setAge(-24000);
-                        babyFeeds.put(id, seen + 1);
-                    } else {
-                        animal.getPersistentDataContainer().remove(guardKey);
-                        babyFeeds.remove(id);
-                    }
+                    if (seen < required) { animal.setAge(-24000); babyFeeds.put(id, seen + 1); }
+                    else { animal.getPersistentDataContainer().remove(guardKey); babyFeeds.remove(id); }
                 }
             }
     }
