@@ -44,11 +44,11 @@ baby:
 # только если в загоне есть минимум две взрослые курицы.
 production:
   chicken:
-    eggs-min: 5
-    eggs-max: 10
+    eggs-min: 0
+    eggs-max: 0
   dairy:
-    milk-min: 2
-    milk-max: 3
+    milk-min: 0
+    milk-max: 0
   wool:
     min: 0
     max: 0
@@ -79,28 +79,30 @@ drops:
     rabbit-hide: { min: 1, max: 1 }
     bone: { min: 1, max: 1 }
 
+# Старая функция AnimalFarmPlugin выключена, чтобы не было двойного размножения.
+# DailyBreedingManager использует эти продукты независимо от флага enabled.
 # На одну пару за сутки расходуется две единицы корма и одно ведро воды.
 feeding:
   cow:
-    enabled: true
+    enabled: false
     foods: [WHEAT]
   sheep:
-    enabled: true
+    enabled: false
     foods: [WHEAT]
   goat:
-    enabled: true
+    enabled: false
     foods: [WHEAT]
   horse:
-    enabled: true
+    enabled: false
     foods: [WHEAT]
   rabbit:
-    enabled: true
+    enabled: false
     foods: [CARROT, GOLDEN_CARROT, DANDELION]
   chicken:
-    enabled: true
+    enabled: false
     foods: ANY_SEEDS
   fish:
-    enabled: true
+    enabled: false
     foods: ANY_SEEDS
 
 messages:
@@ -111,7 +113,7 @@ messages:
   milk-cow: "&aВы надоили корову."
   milk-sheep: "&aВы надоили барана."
   milk-goat: "&aВы надоили козу."
-  milk-baby: "&aМалыш выпил молоко. &7Нужно несколько кормлений для роста."
+  milk-baby: "&aМалыш выпил молоко. &7Нужно три кормления для роста."
   milk-cooldown: "&eВы уже доили сегодня."
   water-added: "&bВода добавлена в кормушку. &7Пустое ведро возвращено."
   water-full: "&eВ кормушке нет свободного места для воды."
