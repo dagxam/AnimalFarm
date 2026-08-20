@@ -6,12 +6,16 @@ import org.bukkit.World;
 import org.bukkit.block.Barrel;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
-import org.bukkit.entity.Chicken;
+import org.bukkit.entity.Animals;
 import org.bukkit.entity.Entity;
-import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Player;
+import org.bukkit.entity.Chicken;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDropItemEvent;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -19,24 +23,31 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Ежесуточное производство продукции прямо в кормушке.
- * Курица: 10 яиц. Овца/баран: 2-3 шерсти и 2-3 ведра молока.
- * Корова: 2-3 ведра молока. Коза: 2-3 ведра молока.
+ * Суточная молочная механика кормушки.
+ * Яйца и шерсть автоматически в кормушку НЕ добавляются.
+ * Игрок заранее кладёт пустые ведра в кормушку; один раз за игровые сутки
+ * они заполняются молоком от взрослых коров, овец и коз.
  */
 public final class FeederProductionManager implements Listener {
     private static final int MILK_MAX_STACK = 16;
 
     private final JavaPlugin plugin;
     private final NamespacedKey feederKey;
-    private final NamespacedKey productionDayKey;
+    private final NamespacedKey milkProductionDayKey;
+    private final NamespacedKey milkedDayKey;
+    private final Map<UUID, Long> milkedAnimals = new HashMap<>();
 
     public FeederProductionManager(JavaPlugin plugin) {
         this.plugin = plugin;
         this.feederKey = new NamespacedKey(plugin, "feeder_block");
-        this.productionDayKey = new NamespacedKey(plugin, "production_day");
+        this.milkProductionDayKey = new NamespacedKey(plugin, "milk_production_day");
+        this.milkedDayKey = new NamespacedKey(plugin, "milked_day");
 
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
 
@@ -56,7 +67,7 @@ public final class FeederProductionManager implements Listener {
             for (var chunk : world.getLoadedChunks()) {
                 for (BlockState state : chunk.getTileEntities()) {
                     if (state instanceof Barrel barrel && isFeeder(barrel.getBlock())) {
-                        produce(barrel);
+                        fillMilk(barrel);
                     }
                 }
             }
@@ -69,88 +80,79 @@ public final class FeederProductionManager implements Listener {
         return barrel.getPersistentDataContainer().has(feederKey, PersistentDataType.BYTE);
     }
 
-    private void produce(Barrel barrel) {
+    private void fillMilk(Barrel barrel) {
         long day = barrel.getWorld().getFullTime() / 24000L;
         long lastDay = barrel.getPersistentDataContainer().getOrDefault(
-                productionDayKey, PersistentDataType.LONG, -1L
+                milkProductionDayKey, PersistentDataType.LONG, -1L
         );
         if (lastDay >= day) return;
 
-        int eggs = 0;
-        int wool = 0;
-        int milk = 0;
-        boolean hasAnimals = false;
+        Inventory inventory = barrel.getInventory();
+        int emptyBuckets = count(inventory, Material.BUCKET);
+        if (emptyBuckets <= 0) return;
+
+        int milkBuckets = 0;
+        int min = Math.max(0, plugin.getConfig().getInt("production.dairy.milk-min", 2));
+        int max = Math.max(min, plugin.getConfig().getInt("production.dairy.milk-max", 3));
 
         for (Entity entity : barrel.getWorld().getNearbyEntities(
                 barrel.getBlock().getLocation(), 17, 6, 17)) {
-            if (!(entity instanceof org.bukkit.entity.Animals animal) || !animal.isAdult()) continue;
-
-            if (entity.getType() == EntityType.CHICKEN) {
-                eggs += 10;
-                hasAnimals = true;
-            } else if (entity.getType() == EntityType.SHEEP) {
-                wool += random(2, 3);
-                milk += random(2, 3);
-                hasAnimals = true;
-            } else if (entity.getType() == EntityType.COW || entity.getType() == EntityType.GOAT) {
-                milk += random(2, 3);
-                hasAnimals = true;
-            }
+            if (!(entity instanceof Animals animal) || !animal.isAdult()) continue;
+            String type = animal.getType().name();
+            if (!type.equals("COW") && !type.equals("SHEEP") && !type.equals("GOAT")) continue;
+            milkBuckets += ThreadLocalRandom.current().nextInt(min, max + 1);
         }
 
-        if (!hasAnimals) return;
+        if (milkBuckets <= 0) return;
+        milkBuckets = Math.min(milkBuckets, emptyBuckets);
 
-        Inventory inventory = barrel.getInventory();
+        remove(inventory, Material.BUCKET, milkBuckets);
+        addMilk(inventory, milkBuckets);
 
-        if (eggs > 0) {
-            addStackable(inventory, new ItemStack(Material.EGG), eggs);
-        }
-        if (wool > 0) {
-            addStackable(inventory, new ItemStack(Material.WHITE_WOOL), wool);
-        }
-        if (milk > 0) {
-            addStackable(inventory, createMilkBucket(1), milk);
-        }
-
-        barrel.getPersistentDataContainer().set(productionDayKey, PersistentDataType.LONG, day);
+        barrel.getPersistentDataContainer().set(milkProductionDayKey, PersistentDataType.LONG, day);
         barrel.update(true, false);
     }
 
-    private int random(int min, int max) {
-        return ThreadLocalRandom.current().nextInt(min, max + 1);
+    private int count(Inventory inventory, Material material) {
+        int total = 0;
+        for (ItemStack item : inventory.getContents()) {
+            if (item != null && item.getType() == material) total += item.getAmount();
+        }
+        return total;
     }
 
-    private ItemStack createMilkBucket(int amount) {
-        ItemStack item = new ItemStack(Material.MILK_BUCKET, amount);
-        ItemMeta meta = item.getItemMeta();
+    private void remove(Inventory inventory, Material material, int amount) {
+        for (int slot = 0; slot < inventory.getSize() && amount > 0; slot++) {
+            ItemStack item = inventory.getItem(slot);
+            if (item == null || item.getType() != material) continue;
+            int take = Math.min(amount, item.getAmount());
+            if (take == item.getAmount()) inventory.setItem(slot, null);
+            else item.setAmount(item.getAmount() - take);
+            amount -= take;
+        }
+    }
+
+    private void addMilk(Inventory inventory, int amount) {
+        ItemStack milk = new ItemStack(Material.MILK_BUCKET);
+        ItemMeta meta = milk.getItemMeta();
         if (meta != null) {
             meta.setMaxStackSize(MILK_MAX_STACK);
-            item.setItemMeta(meta);
+            milk.setItemMeta(meta);
         }
-        return item;
-    }
 
-    private void addStackable(Inventory inventory, ItemStack prototype, int amount) {
         while (amount > 0) {
-            int add = Math.min(amount, prototype.getMaxStackSize());
-            ItemStack stack = prototype.clone();
+            int add = Math.min(amount, MILK_MAX_STACK);
+            ItemStack stack = milk.clone();
             stack.setAmount(add);
-            var leftovers = inventory.addItem(stack);
-            int inserted = add;
-            for (ItemStack item : leftovers.values()) {
-                if (item != null) inserted -= item.getAmount();
-            }
-            if (inserted <= 0) break;
-            amount -= inserted;
-            if (!leftovers.isEmpty()) break;
+            inventory.addItem(stack);
+            amount -= add;
         }
     }
 
     private void normalizeMilkBuckets() {
-        for (var player : plugin.getServer().getOnlinePlayers()) {
+        for (Player player : plugin.getServer().getOnlinePlayers()) {
             normalizeInventory(player.getInventory());
         }
-
         for (World world : plugin.getServer().getWorlds()) {
             for (var chunk : world.getLoadedChunks()) {
                 for (BlockState state : chunk.getTileEntities()) {
@@ -176,25 +178,41 @@ public final class FeederProductionManager implements Listener {
         }
     }
 
-    /** Не даём яйцам от кур внутри кормушки падать на землю. */
+    /**
+     * Обычные яйца оставляем ванильными: они появляются на полу.
+     * AnimalFarm больше не перехватывает их и не складывает автоматически.
+     */
     @EventHandler(ignoreCancelled = true)
     public void onChickenEggDrop(EntityDropItemEvent event) {
-        if (!(event.getEntity() instanceof Chicken chicken)) return;
+        // Ничего не делаем специально.
+    }
 
-        for (World world : plugin.getServer().getWorlds()) {
-            for (var chunk : world.getLoadedChunks()) {
-                for (BlockState state : chunk.getTileEntities()) {
-                    if (!(state instanceof Barrel barrel) || !isFeeder(barrel.getBlock())) continue;
-                    if (barrel.getWorld() != chicken.getWorld()) continue;
-                    if (barrel.getLocation().distanceSquared(chicken.getLocation()) > 17 * 17 + 6 * 6) continue;
+    /**
+     * Ограничивает ручную дойку одного животного одним разом за игровые сутки.
+     * Срабатывает раньше основного обработчика AnimalFarmPlugin.
+     */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onDailyManualMilking(PlayerInteractEntityEvent event) {
+        if (event.getHand() != EquipmentSlot.HAND) return;
 
-                    ItemStack drop = event.getItemDrop().getItemStack();
-                    if (drop.getType() == Material.EGG) {
-                        event.setCancelled(true);
-                    }
-                    return;
-                }
-            }
+        Player player = event.getPlayer();
+        ItemStack hand = player.getInventory().getItemInMainHand();
+        if (hand == null || hand.getType() != Material.BUCKET) return;
+
+        Entity target = event.getRightClicked();
+        if (!(target instanceof Animals animal) || !animal.isAdult()) return;
+        String type = animal.getType().name();
+        if (!type.equals("COW") && !type.equals("SHEEP") && !type.equals("GOAT")) return;
+
+        long day = animal.getWorld().getFullTime() / 24000L;
+        long lastDay = milkedAnimals.getOrDefault(animal.getUniqueId(), -1L);
+        if (lastDay >= day) {
+            event.setCancelled(true);
+            player.sendMessage(plugin.getConfig().getString("messages.prefix", "")
+                    + plugin.getConfig().getString("messages.milk-cooldown", "&eВы уже доили сегодня."));
+            return;
         }
+
+        milkedAnimals.put(animal.getUniqueId(), day);
     }
 }
