@@ -22,7 +22,6 @@ public final class DailyBreedingManager {
     private static final int RADIUS = 16;
     private static final int VERTICAL = 5;
     private final JavaPlugin plugin;
-    private final NamespacedKey feederKey = new NamespacedKey("animalfarm", "feeder_block");
     private final NamespacedKey dayKey;
     private final NamespacedKey waterKey;
 
@@ -63,7 +62,6 @@ public final class DailyBreedingManager {
                 a.setLoveModeTicks(600); b.setLoveModeTicks(600); pairs++;
             }
         }
-        // День засчитывается даже если сегодня не хватило пары/корма: следующая попытка только завтра.
         feeder.getPersistentDataContainer().set(dayKey, PersistentDataType.LONG, day);
         feeder.update(true,false);
     }
@@ -74,17 +72,24 @@ public final class DailyBreedingManager {
 
     private Material findFood(Animals a, Inventory inv) {
         String key=a.getType().name().toLowerCase(Locale.ROOT);
-        for(String s:plugin.getConfig().getStringList("feeding."+key+".foods")) { Material m=Material.matchMaterial(s); if(m!=null&&contains(inv,m)) return m; }
+        List<String> foods=plugin.getConfig().getStringList("feeding."+key+".foods");
+        for(String s:foods) {
+            if ("ANY_SEEDS".equalsIgnoreCase(s)) {
+                for(ItemStack item:inv.getContents()) if(item!=null&&isSeed(item.getType())&&item.getAmount()>0)return item.getType();
+                continue;
+            }
+            Material m=Material.matchMaterial(s); if(m!=null&&contains(inv,m))return m;
+        }
         return null;
     }
+    private boolean isSeed(Material m){return m.name().endsWith("_SEEDS")||m==Material.PITCHER_POD;}
     private boolean contains(Inventory inv,Material m){for(ItemStack i:inv.getContents())if(i!=null&&i.getType()==m&&i.getAmount()>0)return true;return false;}
     private void removeOne(Inventory inv,Material m){for(int s=0;s<inv.getSize();s++){ItemStack i=inv.getItem(s);if(i==null||i.getType()!=m)continue;if(i.getAmount()==1)inv.setItem(s,null);else i.setAmount(i.getAmount()-1);return;}}
     private boolean consumeWater(Barrel b){Inventory inv=b.getInventory();for(int s=0;s<inv.getSize();s++){ItemStack i=inv.getItem(s);if(i==null||i.getType()!=Material.WATER_BUCKET)continue;if(i.getAmount()==1)inv.setItem(s,null);else i.setAmount(i.getAmount()-1);Map<Integer,ItemStack> left=inv.addItem(new ItemStack(Material.BUCKET));for(ItemStack x:left.values())b.getWorld().dropItemNaturally(b.getLocation(),x);return true;}return false;}
     private void move(Animals a,Barrel b){if(a instanceof Mob m)m.getPathfinder().moveTo(b.getLocation(),plugin.getConfig().getDouble("feeder.path-speed",1.1));}
 
     private Pen analyze(Block feeder){
-        int sx=feeder.getX(),sz=feeder.getZ();Set<String> in=new HashSet<>();ArrayDeque<int[]>q=new ArrayDeque<>();q.add(new int[]{sx,sz});in.add(key(sx,sz));int gates=0;boolean open=false,escaped=false;
-        int[][] d={{1,0},{-1,0},{0,1},{0,-1}};
+        int sx=feeder.getX(),sz=feeder.getZ();Set<String> in=new HashSet<>();ArrayDeque<int[]>q=new ArrayDeque<>();q.add(new int[]{sx,sz});in.add(key(sx,sz));int gates=0;boolean open=false,escaped=false;int[][] d={{1,0},{-1,0},{0,1},{0,-1}};
         while(!q.isEmpty()){int[]p=q.removeFirst();for(int[]v:d){int x=p[0]+v[0],z=p[1]+v[1];if(Math.abs(x-sx)>RADIUS||Math.abs(z-sz)>RADIUS){escaped=true;continue;}Block n=feeder.getWorld().getBlockAt(x,feeder.getY(),z);if(isGate(n)){if(in.add(key(x,z))){gates++;if(isOpen(n))open=true;}continue;}if(isFence(n))continue;if(n.getType().isAir()&&in.add(key(x,z)))q.add(new int[]{x,z});}}
         List<Animals>a=new ArrayList<>();for(Entity e:feeder.getWorld().getNearbyEntities(feeder.getLocation(),RADIUS+1,VERTICAL,RADIUS+1))if(e instanceof Animals an&&in.contains(key(an.getLocation().getBlockX(),an.getLocation().getBlockZ())))a.add(an);
         return new Pen(!escaped&&gates==1&&!open,a);
