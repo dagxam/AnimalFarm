@@ -17,7 +17,6 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDeathEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
@@ -31,12 +30,14 @@ public final class AnimalExtrasManager implements Listener {
     private final JavaPlugin plugin;
     private final NamespacedKey feederKey;
     private final NamespacedKey guardKey;
+    private final NamespacedKey pluginMilkCountKey;
     private final Map<UUID,Integer> babyFeeds = new HashMap<>();
 
     public AnimalExtrasManager(JavaPlugin plugin) {
         this.plugin = plugin;
         feederKey = new NamespacedKey(plugin, "feeder_block");
         guardKey = new NamespacedKey(plugin, "baby_growth_guard");
+        pluginMilkCountKey = new NamespacedKey(plugin, "milk_feed_count");
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
         new BukkitRunnable(){ @Override public void run(){ enforceBabyGrowth(); updateHud(); } }.runTaskTimer(plugin, 1L, 1L);
     }
@@ -73,18 +74,28 @@ public final class AnimalExtrasManager implements Listener {
                     if (!isMilkAnimal(animal)) continue;
                     UUID id = animal.getUniqueId();
                     int seen = babyFeeds.getOrDefault(id, 0);
+                    int pluginCount = animal.getPersistentDataContainer().getOrDefault(pluginMilkCountKey, PersistentDataType.INTEGER, 0);
+
                     if (!animal.isAdult()) {
-                        ItemMeta dummy = null;
-                        int pluginCount = animal.getPersistentDataContainer().getOrDefault(
-                                new NamespacedKey(plugin, "milk_feed_count"), PersistentDataType.INTEGER, 0);
+                        animal.getPersistentDataContainer().set(guardKey, PersistentDataType.BYTE, (byte)1);
                         if (pluginCount > 0) seen = Math.max(seen, pluginCount);
-                        babyFeeds.put(id, seen);
+                        if (seen >= required - 1 && pluginCount > 0) {
+                            animal.setAge(0);
+                            babyFeeds.remove(id);
+                            animal.getPersistentDataContainer().remove(guardKey);
+                        } else {
+                            babyFeeds.put(id, seen);
+                        }
                         continue;
                     }
+
                     if (!animal.getPersistentDataContainer().has(guardKey, PersistentDataType.BYTE)) continue;
                     if (seen < required) {
                         animal.setAge(-24000);
                         babyFeeds.put(id, seen + 1);
+                    } else {
+                        animal.getPersistentDataContainer().remove(guardKey);
+                        babyFeeds.remove(id);
                     }
                 }
             }
@@ -99,9 +110,8 @@ public final class AnimalExtrasManager implements Listener {
             if (target == null || !isFeeder(target)) continue;
             Barrel feeder = (Barrel) target.getState();
             Pen pen = analyze(target);
-            String text;
-            if (!pen.valid) text = "&6Кормушка &7| &cЗагон не готов";
-            else text = "&6Кормушка &7| &aЗагон активен &7| &fЖивотных: &e" + pen.animals.size()
+            String text = !pen.valid ? "&6Кормушка &7| &cЗагон не готов" :
+                    "&6Кормушка &7| &aЗагон активен &7| &fЖивотных: &e" + pen.animals.size()
                     + " &7| &bВода: &e" + count(feeder, Material.WATER_BUCKET)
                     + " &7| &eПшеница: &f" + count(feeder, Material.WHEAT)
                     + " &7| &eСемена: &f" + countSeeds(feeder);
