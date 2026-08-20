@@ -9,6 +9,7 @@ feeder:
   path-speed: 1.1
   max-breeding-pairs-per-day: 10
   water-feedings-per-bucket: 10
+  water-max-stack: 16
 
 pen:
   max-radius: 16
@@ -29,23 +30,19 @@ milking:
     sheep: true
     goat: true
 
-# Производство не засоряет кормушку.
-# При наличии сундука на заборе молоко, шерсть и яйца собираются туда раз в игровые сутки.
-# Без сундука молоко и шерсть собираются вручную, а яйца остаются на полу загона.
+# Вся автоматическая продукция собирается прямо в кормушку.
+# Сундук для этой системы больше не используется.
+# Производство выполняется раз в игровые сутки.
 production:
   chicken:
-    eggs-min: 0
-    eggs-max: 0
+    eggs-min: 5
+    eggs-max: 10
   dairy:
-    milk-min: 0
-    milk-max: 0
-  chest:
     milk-min: 5
     milk-max: 10
-    wool-min: 1
-    wool-max: 2
-    egg-min: 5
-    egg-max: 10
+  wool:
+    min: 1
+    max: 2
 
 drops:
   cow:
@@ -64,20 +61,20 @@ drops:
   chicken:
     feather: { min: 3, max: 6 }
 
-# Старый механизм размножения отключён.
-# Размножение выполняет DailyBreedingManager строго один раз после смены игровых суток.
+# Старый механизм размножения AnimalFarmPlugin отключён.
+# DailyBreedingManager размножает животных строго один раз после смены игровых суток.
 feeding:
   cow:
-    enabled: false
+    enabled: true
     foods: [WHEAT]
   sheep:
-    enabled: false
+    enabled: true
     foods: [WHEAT]
   goat:
-    enabled: false
+    enabled: true
     foods: [WHEAT]
   chicken:
-    enabled: false
+    enabled: true
     foods:
       - WHEAT_SEEDS
       - BEETROOT_SEEDS
