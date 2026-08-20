@@ -31,7 +31,6 @@ milking:
     goat: true
 
 # Вся автоматическая продукция собирается прямо в кормушку.
-# Сундук для этой системы больше не используется.
 # Производство выполняется один раз за игровые сутки.
 production:
   chicken:
@@ -46,20 +45,21 @@ production:
 
 drops:
   cow:
-    meat: { min: 1, max: 3 }
-    leather: { min: 0, max: 2 }
+    meat: { min: 1, max: 1 }
+    leather: { min: 1, max: 1 }
     bone: { min: 2, max: 2 }
   sheep:
-    meat: { min: 1, max: 3 }
-    leather: { min: 0, max: 2 }
-    wool: { min: 1, max: 3 }
+    meat: { min: 1, max: 1 }
+    leather: { min: 1, max: 1 }
+    wool: { min: 1, max: 1 }
     bone: { min: 1, max: 1 }
   goat:
-    meat: { min: 1, max: 2 }
-    leather: { min: 0, max: 2 }
+    meat: { min: 1, max: 1 }
+    leather: { min: 1, max: 1 }
     bone: { min: 1, max: 1 }
   chicken:
-    feather: { min: 3, max: 6 }
+    meat: { min: 1, max: 1 }
+    feather: { min: 2, max: 2 }
 
 # Старый механизм размножения AnimalFarmPlugin отключён.
 # DailyBreedingManager размножает животных строго один раз после смены игровых суток.
