@@ -10,9 +10,7 @@ import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.data.Openable;
 import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.entity.Ageable;
 import org.bukkit.entity.Animals;
-import org.bukkit.entity.Chicken;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
@@ -32,7 +30,6 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.ShapedRecipe;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -55,7 +52,6 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
         milkFeedDayKey = new NamespacedKey(this, "milk_feed_day");
         productionDayKey = new NamespacedKey(this, "production_day");
         mobBucketKey = new NamespacedKey(this, "mob_bucket");
-
         getServer().getPluginManager().registerEvents(this, this);
         AnimalFarmCommand command = new AnimalFarmCommand(this);
         Objects.requireNonNull(getCommand("animalfarm")).setExecutor(command);
@@ -144,17 +140,13 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
         ItemStack current = event.getCurrentItem();
         if (isMobBucket(cursor) || isMobBucket(current)
                 || (cursor != null && cursor.getType() == Material.LAVA_BUCKET)
-                || (current != null && current.getType() == Material.LAVA_BUCKET)) {
-            event.setCancelled(true);
-        }
+                || (current != null && current.getType() == Material.LAVA_BUCKET)) event.setCancelled(true);
     }
 
     @EventHandler(ignoreCancelled = true)
     public void onInventoryDrag(InventoryDragEvent event) {
         if (!(event.getInventory().getHolder() instanceof Barrel barrel) || !isFeederBlock(barrel.getBlock())) return;
-        if (isMobBucket(event.getOldCursor()) || (event.getOldCursor() != null && event.getOldCursor().getType() == Material.LAVA_BUCKET)) {
-            event.setCancelled(true);
-        }
+        if (isMobBucket(event.getOldCursor()) || (event.getOldCursor() != null && event.getOldCursor().getType() == Material.LAVA_BUCKET)) event.setCancelled(true);
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -162,18 +154,22 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
         if (event.getHand() != EquipmentSlot.HAND) return;
         Player player = event.getPlayer();
         ItemStack hand = player.getInventory().getItemInMainHand();
-        if (isMobBucket(hand) || hand.getType() != Material.BUCKET) return;
-
         Entity target = event.getRightClicked();
         String animal = getAnimalKey(target);
-        if (animal == null || animal.equals("chicken") || !getConfig().getBoolean("milking.animals." + animal, true)) return;
+        if (animal == null || animal.equals("chicken")) return;
 
-        // Малышей можно поить молоком вручную. Два кормления = взрослое животное.
+        // Специальное ведро для переноса мобов никогда не используется для дойки.
+        if (isMobBucket(hand)) return;
+
+        // Молоком можно поить детёнышей: одно кормление в сутки, два кормления = взрослое животное.
         if (target instanceof Animals baby && !baby.isAdult()) {
+            if (hand.getType() != Material.MILK_BUCKET) return;
+            event.setCancelled(true);
             feedBabyWithMilk(player, baby);
             return;
         }
 
+        if (hand.getType() != Material.BUCKET || !getConfig().getBoolean("milking.animals." + animal, true)) return;
         long cooldown = Math.max(0, getConfig().getLong("milking.cooldown-seconds", 30)) * 1000L;
         long now = System.currentTimeMillis();
         long last = milkingCooldown.getOrDefault(target.getUniqueId(), 0L);
@@ -182,7 +178,6 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
             player.sendMessage(message("prefix") + message("milk-cooldown"));
             return;
         }
-
         event.setCancelled(true);
         milkingCooldown.put(target.getUniqueId(), now);
         replaceOneMainHandItem(player, new ItemStack(Material.MILK_BUCKET));
@@ -196,10 +191,11 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
 
     private void feedBabyWithMilk(Player player, Animals baby) {
         ItemStack hand = player.getInventory().getItemInMainHand();
-        if (hand.getType() != Material.MILK_BUCKET || isMobBucket(hand)) return;
-        player.getInventory().setItemInMainHand(hand.getAmount() <= 1 ? new ItemStack(Material.BUCKET) : hand);
-        if (hand.getAmount() > 1) hand.setAmount(hand.getAmount() - 1);
-        addMilkFeed(baby, baby.getWorld().getFullTime() / 24000L);
+        long day = baby.getWorld().getFullTime() / 24000L;
+        if (getMilkFeedDay(baby) >= day) return;
+        if (hand.getAmount() <= 1) player.getInventory().setItemInMainHand(new ItemStack(Material.BUCKET));
+        else hand.setAmount(hand.getAmount() - 1);
+        addMilkFeed(baby, day);
         player.sendMessage(message("prefix") + message("milk-baby"));
     }
 
@@ -249,15 +245,13 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onChickenEgg(EntityDropItemEvent event) {
-        // Ванильные яйца оставляем. Суточная квота автоматически добавляется в кормушку отдельно.
+        // Обычное ванильное яйцо остаётся. Дополнительные 5-10 яиц в сутки собираются кормушкой.
     }
 
     private void startFeederTask() {
         long ticks = Math.max(10, getConfig().getLong("feeder.check-interval-seconds", 2) * 20L);
         new BukkitRunnable() {
-            @Override public void run() {
-                if (getConfig().getBoolean("feeder.enabled", true)) processFeeders();
-            }
+            @Override public void run() { if (getConfig().getBoolean("feeder.enabled", true)) processFeeders(); }
         }.runTaskTimer(this, ticks, ticks);
     }
 
@@ -289,7 +283,6 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
     private void processFeeder(Barrel barrel) {
         PenStatus pen = analyzePen(barrel.getLocation());
         if (!pen.valid()) return;
-
         collectDailyProduction(barrel, pen);
         processBabyMilk(barrel, pen);
         processBreeding(barrel, pen);
@@ -303,36 +296,23 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
             String type = getAnimalKey(animal);
             if (type != null && getConfig().getBoolean("feeding." + type + ".enabled", true)) groups.computeIfAbsent(type, ignored -> new ArrayList<>()).add(animal);
         }
-
         int maxPairs = Math.max(1, getConfig().getInt("feeder.max-breeding-pairs-per-day", 10));
         int pairs = 0;
         for (List<Animals> group : groups.values()) {
             if (group.size() < 2 || pairs >= maxPairs) continue;
             for (int i = 0; i + 1 < group.size() && pairs < maxPairs; i += 2) {
-                Animals a = group.get(i);
-                Animals b = group.get(i + 1);
+                Animals a = group.get(i), b = group.get(i + 1);
                 if (getBreedDay(a) >= day || getBreedDay(b) >= day) continue;
-                Material foodA = findFood(a, barrel.getInventory());
-                Material foodB = findFood(b, barrel.getInventory());
+                Material foodA = findFood(a, barrel.getInventory()), foodB = findFood(b, barrel.getInventory());
                 if (foodA == null || foodB == null) continue;
-
                 Location target = barrel.getLocation().add(0.5, 0.5, 0.5);
-                if (a.getLocation().distanceSquared(target) > 6.25) {
-                    moveToFeeder(a, target);
-                    continue;
-                }
-                if (b.getLocation().distanceSquared(target) > 6.25) {
-                    moveToFeeder(b, target);
-                    continue;
-                }
+                if (a.getLocation().distanceSquared(target) > 6.25) { moveToFeeder(a, target); continue; }
+                if (b.getLocation().distanceSquared(target) > 6.25) { moveToFeeder(b, target); continue; }
                 if (!consumeWaterCharge(barrel)) continue;
-
                 removeOneFood(barrel.getInventory(), foodA);
                 removeOneFood(barrel.getInventory(), foodB);
-                a.setBreed(true);
-                b.setBreed(true);
-                setBreedDay(a, day);
-                setBreedDay(b, day);
+                a.setBreed(true); b.setBreed(true);
+                setBreedDay(a, day); setBreedDay(b, day);
                 pairs++;
             }
         }
@@ -346,25 +326,14 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
         long day = barrel.getWorld().getFullTime() / 24000L;
         long last = barrel.getPersistentDataContainer().getOrDefault(productionDayKey, PersistentDataType.LONG, -1L);
         if (last >= day) return;
-
-        int eggMin = getConfig().getInt("production.chicken.eggs-min", 5);
-        int eggMax = getConfig().getInt("production.chicken.eggs-max", 10);
-        int milkMin = getConfig().getInt("production.dairy.milk-min", 5);
-        int milkMax = getConfig().getInt("production.dairy.milk-max", 10);
-
+        int eggMin = getConfig().getInt("production.chicken.eggs-min", 5), eggMax = getConfig().getInt("production.chicken.eggs-max", 10);
+        int milkMin = getConfig().getInt("production.dairy.milk-min", 5), milkMax = getConfig().getInt("production.dairy.milk-max", 10);
         for (Animals animal : pen.animals()) {
             if (!animal.isAdult()) continue;
             String type = getAnimalKey(animal);
-            if (type == null) continue;
-            if (type.equals("chicken")) {
-                int eggs = randomAmount(eggMin, eggMax);
-                addToFeeder(barrel.getInventory(), new ItemStack(Material.EGG), eggs);
-            } else if (type.equals("cow") || type.equals("sheep") || type.equals("goat")) {
-                int milk = randomAmount(milkMin, milkMax);
-                addToFeeder(barrel.getInventory(), new ItemStack(Material.MILK_BUCKET), milk);
-            }
+            if ("chicken".equals(type)) addToFeeder(barrel.getInventory(), new ItemStack(Material.EGG), randomAmount(eggMin, eggMax));
+            else if ("cow".equals(type) || "sheep".equals(type) || "goat".equals(type)) addToFeeder(barrel.getInventory(), new ItemStack(Material.MILK_BUCKET), randomAmount(milkMin, milkMax));
         }
-
         barrel.getPersistentDataContainer().set(productionDayKey, PersistentDataType.LONG, day);
         barrel.update(true, false);
     }
@@ -375,72 +344,40 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
     }
 
     private void addToFeeder(Inventory inventory, ItemStack prototype, int amount) {
-        int maxStack = prototype.getMaxStackSize();
-        while (amount > 0) {
-            int add = Math.min(amount, maxStack);
-            ItemStack stack = prototype.clone();
-            stack.setAmount(add);
-            Map<Integer, ItemStack> leftovers = inventory.addItem(stack);
-            int left = leftovers.values().stream().mapToInt(ItemStack::getAmount).sum();
-            amount = left;
-            if (left > 0) break;
+        while (amount-- > 0) {
+            Map<Integer, ItemStack> leftovers = inventory.addItem(prototype.clone());
+            if (!leftovers.isEmpty()) break;
         }
     }
 
     private void processBabyMilk(Barrel barrel, PenStatus pen) {
         long day = barrel.getWorld().getFullTime() / 24000L;
         for (Animals animal : pen.animals()) {
-            if (animal.isAdult() || !isMilkAnimal(animal)) continue;
-            if (!contains(barrel.getInventory(), Material.MILK_BUCKET)) continue;
-            long lastDay = getMilkFeedDay(animal);
-            if (lastDay >= day) continue;
-
+            if (animal.isAdult() || !isMilkAnimal(animal) || !contains(barrel.getInventory(), Material.MILK_BUCKET)) continue;
+            if (getMilkFeedDay(animal) >= day) continue;
             removeOneFood(barrel.getInventory(), Material.MILK_BUCKET);
-            int feeds = getMilkFeedCount(animal) + 1;
-            setMilkFeedDay(animal, day);
-            setMilkFeedCount(animal, feeds);
-            if (feeds >= 2) {
-                animal.setAge(0);
-                setMilkFeedCount(animal, 0);
-            }
+            addMilkFeed(animal, day);
         }
     }
 
     private boolean isMilkAnimal(Entity entity) {
         String key = getAnimalKey(entity);
-        return key != null && (key.equals("cow") || key.equals("sheep") || key.equals("goat"));
+        return "cow".equals(key) || "sheep".equals(key) || "goat".equals(key);
     }
 
     private void addMilkFeed(Animals animal, long day) {
-        long lastDay = getMilkFeedDay(animal);
-        if (lastDay == day) return;
+        if (getMilkFeedDay(animal) >= day) return;
         int feeds = getMilkFeedCount(animal) + 1;
-        setMilkFeedDay(animal, day);
-        setMilkFeedCount(animal, feeds);
-        if (feeds >= 2) {
-            animal.setAge(0);
-            setMilkFeedCount(animal, 0);
-        }
+        setMilkFeedDay(animal, day); setMilkFeedCount(animal, feeds);
+        if (feeds >= 2) { animal.setAge(0); setMilkFeedCount(animal, 0); }
     }
 
-    private int getMilkFeedCount(Animals animal) {
-        return animal.getPersistentDataContainer().getOrDefault(milkFeedCountKey, PersistentDataType.INTEGER, 0);
-    }
-    private void setMilkFeedCount(Animals animal, int value) {
-        animal.getPersistentDataContainer().set(milkFeedCountKey, PersistentDataType.INTEGER, value);
-    }
-    private long getMilkFeedDay(Animals animal) {
-        return animal.getPersistentDataContainer().getOrDefault(milkFeedDayKey, PersistentDataType.LONG, -1L);
-    }
-    private void setMilkFeedDay(Animals animal, long day) {
-        animal.getPersistentDataContainer().set(milkFeedDayKey, PersistentDataType.LONG, day);
-    }
-    private long getBreedDay(Animals animal) {
-        return animal.getPersistentDataContainer().getOrDefault(breedDayKey, PersistentDataType.LONG, -1L);
-    }
-    private void setBreedDay(Animals animal, long day) {
-        animal.getPersistentDataContainer().set(breedDayKey, PersistentDataType.LONG, day);
-    }
+    private int getMilkFeedCount(Animals animal) { return animal.getPersistentDataContainer().getOrDefault(milkFeedCountKey, PersistentDataType.INTEGER, 0); }
+    private void setMilkFeedCount(Animals animal, int value) { animal.getPersistentDataContainer().set(milkFeedCountKey, PersistentDataType.INTEGER, value); }
+    private long getMilkFeedDay(Animals animal) { return animal.getPersistentDataContainer().getOrDefault(milkFeedDayKey, PersistentDataType.LONG, -1L); }
+    private void setMilkFeedDay(Animals animal, long day) { animal.getPersistentDataContainer().set(milkFeedDayKey, PersistentDataType.LONG, day); }
+    private long getBreedDay(Animals animal) { return animal.getPersistentDataContainer().getOrDefault(breedDayKey, PersistentDataType.LONG, -1L); }
+    private void setBreedDay(Animals animal, long day) { animal.getPersistentDataContainer().set(breedDayKey, PersistentDataType.LONG, day); }
 
     private Material findFood(Animals animal, Inventory inventory) {
         String key = getAnimalKey(animal);
@@ -467,7 +404,7 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
     }
 
     private boolean consumeWaterCharge(Barrel barrel) {
-        if (!contains(barrel.getInventory(), Material.WATER_BUCKET)) return true;
+        if (!contains(barrel.getInventory(), Material.WATER_BUCKET)) return false;
         int progress = getWaterProgress(barrel) + 1;
         int feedingsPerBucket = Math.max(1, getConfig().getInt("feeder.water-feedings-per-bucket", 10));
         if (progress >= feedingsPerBucket) {
@@ -479,38 +416,16 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
         return true;
     }
 
-    private int getWaterProgress(Barrel barrel) {
-        return barrel.getPersistentDataContainer().getOrDefault(waterProgressKey, PersistentDataType.INTEGER, 0);
-    }
-    private void setWaterProgress(Barrel barrel, int value) {
-        barrel.getPersistentDataContainer().set(waterProgressKey, PersistentDataType.INTEGER, value);
-        barrel.update(true, false);
-    }
-
-    private int count(Inventory inventory, Material material) {
-        int count = 0;
-        for (ItemStack item : inventory.getContents()) if (item != null && item.getType() == material) count += item.getAmount();
-        return count;
-    }
-    private int countSeeds(Inventory inventory) {
-        int count = 0;
-        for (ItemStack item : inventory.getContents()) if (item != null && isSeed(item.getType())) count += item.getAmount();
-        return count;
-    }
-    private boolean isSeed(Material material) {
-        String name = material.name();
-        return name.endsWith("_SEEDS") || material == Material.PITCHER_POD;
-    }
+    private int getWaterProgress(Barrel barrel) { return barrel.getPersistentDataContainer().getOrDefault(waterProgressKey, PersistentDataType.INTEGER, 0); }
+    private void setWaterProgress(Barrel barrel, int value) { barrel.getPersistentDataContainer().set(waterProgressKey, PersistentDataType.INTEGER, value); barrel.update(true, false); }
+    private int count(Inventory inventory, Material material) { int count = 0; for (ItemStack item : inventory.getContents()) if (item != null && item.getType() == material) count += item.getAmount(); return count; }
+    private int countSeeds(Inventory inventory) { int count = 0; for (ItemStack item : inventory.getContents()) if (item != null && isSeed(item.getType())) count += item.getAmount(); return count; }
+    private boolean isSeed(Material material) { String name = material.name(); return name.endsWith("_SEEDS") || material == Material.PITCHER_POD; }
 
     private String formatHud(PenStatus status, Barrel barrel) {
         String base = "&6Кормушка &7| ";
         if (!status.valid()) return color(base + "&cЗагон не готов &7| " + penReason(status));
-        return color(base + "&aЗагон активен &7| &fЖивотных: &e" + status.animals().size()
-                + " &7| &bВода: &e" + count(barrel.getInventory(), Material.WATER_BUCKET)
-                + " &7| &eПшеница: " + count(barrel.getInventory(), Material.WHEAT)
-                + " &7| &eСемена: " + countSeeds(barrel.getInventory())
-                + " &7| &dМолоко: &e" + count(barrel.getInventory(), Material.MILK_BUCKET)
-                + " &7| &fЯйца: &e" + count(barrel.getInventory(), Material.EGG));
+        return color(base + "&aЗагон активен &7| &fЖивотных: &e" + status.animals().size() + " &7| &bВода: &e" + count(barrel.getInventory(), Material.WATER_BUCKET) + " &7| &eПшеница: " + count(barrel.getInventory(), Material.WHEAT) + " &7| &eСемена: " + countSeeds(barrel.getInventory()) + " &7| &dМолоко: &e" + count(barrel.getInventory(), Material.MILK_BUCKET) + " &7| &fЯйца: &e" + count(barrel.getInventory(), Material.EGG));
     }
 
     private String penReason(PenStatus status) {
@@ -524,58 +439,30 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
     private PenStatus analyzePen(Location feeder) {
         int radius = Math.max(4, getConfig().getInt("pen.max-radius", 16));
         int startX = feeder.getBlockX(), startZ = feeder.getBlockZ();
-        Set<String> inside = new HashSet<>();
-        ArrayDeque<int[]> queue = new ArrayDeque<>();
-        queue.add(new int[]{startX, startZ});
-        inside.add(key(startX, startZ));
+        Set<String> inside = new HashSet<>(); ArrayDeque<int[]> queue = new ArrayDeque<>();
+        queue.add(new int[]{startX, startZ}); inside.add(key(startX, startZ));
         int gates = 0; boolean openGate = false, escaped = false;
-
         while (!queue.isEmpty()) {
             int[] point = queue.removeFirst();
             for (int[] direction : DIRECTIONS) {
                 int nx = point[0] + direction[0], nz = point[1] + direction[1];
                 if (Math.abs(nx - startX) > radius || Math.abs(nz - startZ) > radius) { escaped = true; continue; }
                 Block next = feeder.getWorld().getBlockAt(nx, feeder.getBlockY(), nz);
-                if (isGate(next)) {
-                    String gateKey = key(nx, nz);
-                    if (inside.add(gateKey)) { gates++; if (isOpen(next)) openGate = true; }
-                    continue;
-                }
+                if (isGate(next)) { if (inside.add(key(nx, nz))) { gates++; if (isOpen(next)) openGate = true; } continue; }
                 if (isFence(next)) continue;
                 if (next.getType().isAir() && inside.add(key(nx, nz))) queue.add(new int[]{nx, nz});
             }
         }
-
-        List<Animals> animals = new ArrayList<>();
-        double range = radius + 1.0;
-        for (Entity entity : feeder.getWorld().getNearbyEntities(feeder, range, Math.max(3, getConfig().getInt("pen.vertical-range", 5)), range)) {
-            if (entity instanceof Animals animal && inside.contains(key(animal.getLocation().getBlockX(), animal.getLocation().getBlockZ()))) animals.add(animal);
-        }
+        List<Animals> animals = new ArrayList<>(); double range = radius + 1.0;
+        for (Entity entity : feeder.getWorld().getNearbyEntities(feeder, range, Math.max(3, getConfig().getInt("pen.vertical-range", 5)), range)) if (entity instanceof Animals animal && inside.contains(key(animal.getLocation().getBlockX(), animal.getLocation().getBlockZ()))) animals.add(animal);
         return new PenStatus(!escaped && gates == 1 && !openGate, escaped, gates, openGate, animals);
     }
 
-    private boolean isFence(Block block) {
-        String name = block.getType().name();
-        return name.endsWith("_FENCE") && !name.endsWith("_FENCE_GATE");
-    }
+    private boolean isFence(Block block) { String name = block.getType().name(); return name.endsWith("_FENCE") && !name.endsWith("_FENCE_GATE"); }
     private boolean isGate(Block block) { return block.getBlockData() instanceof Openable && block.getType().name().endsWith("_FENCE_GATE"); }
     private boolean isOpen(Block block) { return block.getBlockData() instanceof Openable openable && openable.isOpen(); }
     private static final int[][] DIRECTIONS = {{1,0},{-1,0},{0,1},{0,-1}};
     private String key(int x, int z) { return x + ":" + z; }
-
-    private PenStatus findActivePen(Animals animal) {
-        for (World world : getServer().getWorlds()) {
-            for (var chunk : world.getLoadedChunks()) {
-                for (BlockState state : chunk.getTileEntities()) {
-                    if (state instanceof Barrel barrel && isFeederBlock(barrel.getBlock())) {
-                        PenStatus status = analyzePen(barrel.getLocation());
-                        if (status.valid() && status.animals().contains(animal)) return status;
-                    }
-                }
-            }
-        }
-        return new PenStatus(false, false, 0, false, List.of());
-    }
 
     private String getAnimalKey(Entity entity) {
         return switch (entity.getType()) {
