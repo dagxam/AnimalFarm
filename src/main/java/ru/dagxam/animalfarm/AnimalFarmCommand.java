@@ -14,7 +14,8 @@ public final class AnimalFarmCommand implements CommandExecutor, TabCompleter {
     public AnimalFarmCommand(AnimalFarmPlugin plugin) {
         this.plugin = plugin;
         new MobBucketManager(plugin);
-        new ProductionChestManager(plugin);
+        // Сундук полностью убран из механики. Продукция собирается прямо в кормушку.
+        new FeederProductionManager(plugin);
         new RecipeManager(plugin);
         new DailyBreedingManager(plugin);
     }
