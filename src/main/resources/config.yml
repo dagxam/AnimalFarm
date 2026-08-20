@@ -7,11 +7,7 @@ feeder:
   check-interval-seconds: 2
   eating-distance: 2.5
   path-speed: 1.1
-
-  # Максимум пар, которые кормушка может размножить за один игровой день.
   max-breeding-pairs-per-day: 10
-
-  # Одного полного ведра воды хватает на несколько автоматических кормлений.
   water-feedings-per-bucket: 10
 
 pen:
@@ -22,12 +18,9 @@ hud:
   enabled: true
   range: 6
 
-# Специальное ведро для переноса любых живых мобов.
-# Оно не используется для дойки и не помещается в кормушку.
 mob-bucket:
   enabled: true
 
-# Ручная дойка. Автоматическая дойка в загоне работает отдельно.
 milking:
   enabled: true
   cooldown-seconds: 30
@@ -36,15 +29,21 @@ milking:
     sheep: true
     goat: true
 
-# Автоматический суточный сбор в кормушку.
-# Норма применяется КАЖДОМУ взрослому животному.
+# Старое производство в кормушку отключено.
+# При наличии сборочного сундука молоко и шерсть идут в него.
+# Без сундука молоко и шерсть собираются вручную, а яйца остаются на полу.
 production:
   chicken:
-    eggs-min: 5
-    eggs-max: 10
+    eggs-min: 0
+    eggs-max: 0
   dairy:
+    milk-min: 0
+    milk-max: 0
+  chest:
     milk-min: 5
     milk-max: 10
+    wool-min: 1
+    wool-max: 2
 
 drops:
   cow:
