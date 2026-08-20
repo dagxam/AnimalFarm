@@ -8,9 +8,13 @@ feeder:
   eating-distance: 2.5
   path-speed: 1.1
   max-breeding-pairs-per-day: 10
-  # Одна пара за одно суточное размножение расходует одно ведро воды.
   water-feedings-per-bucket: 1
   water-max-stack: 16
+
+aquarium:
+  enabled: true
+  max-radius: 16
+  vertical-range: 5
 
 pen:
   max-radius: 16
@@ -29,21 +33,22 @@ milking:
     cow: true
     sheep: true
     goat: true
-  # Автоматическая дойка кормушки: 2–3 ведра на взрослое животное за сутки.
   milk-min: 2
   milk-max: 3
 
-# Старый сбор продукции AnimalFarmPlugin отключён.
-# Яйца и шерсть автоматически в кормушку НЕ попадают.
-# Молоко собирает только FeederProductionManager в пустые ведра,
-# которые игрок заранее положил в кормушку.
+baby:
+  milk-feedings-required: 3
+
+# Яйца и шерсть НЕ складываются в кормушку.
+# Яйца появляются на полу загона: 5-10 на взрослую курицу за сутки,
+# только если в загоне есть минимум две взрослые курицы.
 production:
   chicken:
-    eggs-min: 0
-    eggs-max: 0
+    eggs-min: 5
+    eggs-max: 10
   dairy:
-    milk-min: 0
-    milk-max: 0
+    milk-min: 2
+    milk-max: 3
   wool:
     min: 0
     max: 0
@@ -65,10 +70,16 @@ drops:
   chicken:
     meat: { min: 1, max: 1 }
     feather: { min: 2, max: 2 }
+  horse:
+    meat: { min: 1, max: 1 }
+    leather: { min: 1, max: 1 }
+    bone: { min: 2, max: 2 }
+  rabbit:
+    meat: { min: 1, max: 1 }
+    rabbit-hide: { min: 1, max: 1 }
+    bone: { min: 1, max: 1 }
 
-# Для одного успешного размножения пары за игровые сутки:
-# корова/овца/коза — 2 пшеницы + 1 ведро воды;
-# курица — 2 семени + 1 ведро воды.
+# На одну пару за сутки расходуется две единицы корма и одно ведро воды.
 feeding:
   cow:
     enabled: true
@@ -79,15 +90,18 @@ feeding:
   goat:
     enabled: true
     foods: [WHEAT]
+  horse:
+    enabled: true
+    foods: [WHEAT]
+  rabbit:
+    enabled: true
+    foods: [CARROT, GOLDEN_CARROT, DANDELION]
   chicken:
     enabled: true
-    foods:
-      - WHEAT_SEEDS
-      - BEETROOT_SEEDS
-      - PUMPKIN_SEEDS
-      - MELON_SEEDS
-      - TORCHFLOWER_SEEDS
-      - PITCHER_POD
+    foods: ANY_SEEDS
+  fish:
+    enabled: true
+    foods: ANY_SEEDS
 
 messages:
   prefix: "&8[&6AnimalFarm&8] &r"
@@ -97,7 +111,7 @@ messages:
   milk-cow: "&aВы надоили корову."
   milk-sheep: "&aВы надоили барана."
   milk-goat: "&aВы надоили козу."
-  milk-baby: "&aМалыш выпил молоко. &7Два кормления — и он вырастет."
+  milk-baby: "&aМалыш выпил молоко. &7Нужно несколько кормлений для роста."
   milk-cooldown: "&eВы уже доили сегодня."
   water-added: "&bВода добавлена в кормушку. &7Пустое ведро возвращено."
   water-full: "&eВ кормушке нет свободного места для воды."
