@@ -25,7 +25,7 @@ import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.*;
 
-/** Аквариум: закрытый квадрат из стекла с кормушкой внутри. */
+/** Аквариум: закрытый квадрат из стекла с кормушкой внутри. Вода находится только внутри аквариума. */
 public final class FishFarmManager implements Listener {
     private final JavaPlugin plugin;
     private final NamespacedKey feederKey;
@@ -42,6 +42,7 @@ public final class FishFarmManager implements Listener {
     }
 
     private void processAquariums() {
+        if (!plugin.getConfig().getBoolean("aquarium.enabled", true)) return;
         for (World world : plugin.getServer().getWorlds()) {
             for (var chunk : world.getLoadedChunks()) {
                 for (var state : chunk.getTileEntities()) {
@@ -53,27 +54,28 @@ public final class FishFarmManager implements Listener {
 
     private void processAquarium(Barrel feeder) {
         Aquarium aquarium = findAquarium(feeder.getBlock());
-        if (aquarium == null) return;
+        // Нет воды внутри стеклянного квадрата = аквариум НЕ ГОТОВ.
+        if (aquarium == null || !aquarium.hasWater()) return;
+
         long day = feeder.getWorld().getFullTime() / 24000L;
         long last = feeder.getPersistentDataContainer().getOrDefault(dayKey, PersistentDataType.LONG, -1L);
         if (last >= day) return;
 
         List<Fish> fish = new ArrayList<>();
         for (Entity entity : feeder.getWorld().getNearbyEntities(feeder.getLocation(), 16, 8, 16)) {
-            if (!(entity instanceof Fish f) || !aquarium.inside(f.getLocation())) continue;
-            if (!isWater(f.getLocation().getBlock())) continue;
-            fish.add(f);
+            if (entity instanceof Fish f && aquarium.inside(f.getLocation()) && isWater(f.getLocation().getBlock())) fish.add(f);
         }
 
         Map<EntityType, List<Fish>> groups = new HashMap<>();
         for (Fish f : fish) groups.computeIfAbsent(f.getType(), ignored -> new ArrayList<>()).add(f);
+
         int pairs = 0;
         int maxPairs = Math.max(1, plugin.getConfig().getInt("feeder.max-breeding-pairs-per-day", 10));
-
         for (var entry : groups.entrySet()) {
             List<Fish> group = entry.getValue();
             for (int i = 0; i + 1 < group.size() && pairs < maxPairs; i += 2) {
-                if (!consumeSeeds(feeder.getInventory(), 2) || !consumeWater(feeder)) break;
+                // В кормушке аквариума используются ТОЛЬКО семена. Вода из кормушки не требуется.
+                if (!consumeSeeds(feeder.getInventory(), 2)) break;
                 Location spawn = findWater(feeder, aquarium);
                 if (spawn == null) break;
                 feeder.getWorld().spawnEntity(spawn, entry.getKey());
@@ -104,22 +106,9 @@ public final class FishFarmManager implements Listener {
         return m.name().endsWith("_SEEDS") || m == Material.PITCHER_POD;
     }
 
-    private boolean consumeWater(Barrel feeder) {
-        Inventory inv = feeder.getInventory();
-        for (int slot = 0; slot < inv.getSize(); slot++) {
-            ItemStack item = inv.getItem(slot);
-            if (item == null || item.getType() != Material.WATER_BUCKET) continue;
-            if (item.getAmount() == 1) inv.setItem(slot, null); else item.setAmount(item.getAmount() - 1);
-            Map<Integer, ItemStack> left = inv.addItem(new ItemStack(Material.BUCKET));
-            if (!left.isEmpty()) feeder.getWorld().dropItemNaturally(feeder.getLocation(), left.values().iterator().next());
-            return true;
-        }
-        return false;
-    }
-
     private Location findWater(Barrel feeder, Aquarium a) {
         for (int x = a.minX + 1; x < a.maxX; x++) for (int z = a.minZ + 1; z < a.maxZ; z++) {
-            Block b = feeder.getWorld().getBlockAt(x, feeder.getY(), z);
+            Block b = feeder.getWorld().getBlockAt(x, a.y, z);
             if (isWater(b)) return b.getLocation().add(0.5, 0.2, 0.5);
         }
         return null;
@@ -132,7 +121,7 @@ public final class FishFarmManager implements Listener {
         if (!player.getInventory().getItemInMainHand().getType().isAir()) return;
         if (!(event.getRightClicked() instanceof Fish fish)) return;
         Aquarium aquarium = findAquariumNear(fish);
-        if (aquarium == null) return;
+        if (aquarium == null || !aquarium.hasWater()) return;
         event.setCancelled(true);
         Material item = switch (fish.getType()) {
             case COD -> Material.COD;
@@ -165,8 +154,7 @@ public final class FishFarmManager implements Listener {
         Block water = isWater(clicked) ? clicked : clicked.getRelative(event.getBlockFace());
         if (!isWater(water)) return; // На земле предмет не трогаем.
         event.setCancelled(true);
-        Location spawn = water.getLocation().add(0.5, 0.2, 0.5);
-        player.getWorld().spawnEntity(spawn, type);
+        player.getWorld().spawnEntity(water.getLocation().add(0.5, 0.2, 0.5), type);
         if (hand.getAmount() <= 1) player.getInventory().setItemInMainHand(new ItemStack(Material.AIR));
         else hand.setAmount(hand.getAmount() - 1);
     }
@@ -175,13 +163,13 @@ public final class FishFarmManager implements Listener {
         for (var chunk : fish.getWorld().getLoadedChunks()) for (var state : chunk.getTileEntities())
             if (state instanceof Barrel barrel && isFeeder(barrel.getBlock())) {
                 Aquarium a = findAquarium(barrel.getBlock());
-                if (a != null && a.inside(fish.getLocation())) return a;
+                if (a != null && a.hasWater() && a.inside(fish.getLocation())) return a;
             }
         return null;
     }
 
     private Aquarium findAquarium(Block feeder) {
-        int max = 16;
+        int max = Math.max(4, plugin.getConfig().getInt("aquarium.max-radius", 16));
         int left = -1, right = -1, north = -1, south = -1;
         for (int d = 1; d <= max; d++) {
             if (left == -1 && isGlass(feeder.getWorld().getBlockAt(feeder.getX() - d, feeder.getY(), feeder.getZ()))) left = feeder.getX() - d;
@@ -198,6 +186,14 @@ public final class FishFarmManager implements Listener {
             if (!isGlass(feeder.getWorld().getBlockAt(left, feeder.getY(), z))) return null;
             if (!isGlass(feeder.getWorld().getBlockAt(right, feeder.getY(), z))) return null;
         }
+
+        // Весь внутренний объём на уровне кормушки обязан быть водой.
+        // Если хотя бы один внутренний блок пустой — аквариум НЕ ГОТОВ.
+        for (int x = left + 1; x < right; x++) {
+            for (int z = north + 1; z < south; z++) {
+                if (!isWater(feeder.getWorld().getBlockAt(x, feeder.getY(), z))) return null;
+            }
+        }
         return new Aquarium(left, right, north, south, feeder.getY());
     }
 
@@ -206,9 +202,7 @@ public final class FishFarmManager implements Listener {
         return n.equals("GLASS") || n.endsWith("_GLASS") || n.endsWith("_GLASS_PANE");
     }
 
-    private boolean isWater(Block b) {
-        return b.getType() == Material.WATER;
-    }
+    private boolean isWater(Block b) { return b.getType() == Material.WATER; }
 
     private boolean isFeeder(Block b) {
         return b.getType() == Material.BARREL && b.getState() instanceof Barrel barrel
@@ -217,7 +211,10 @@ public final class FishFarmManager implements Listener {
 
     private record Aquarium(int minX, int maxX, int minZ, int maxZ, int y) {
         boolean inside(Location l) {
-            return l.getBlockX() > minX && l.getBlockX() < maxX && l.getBlockZ() > minZ && l.getBlockZ() < maxZ && Math.abs(l.getBlockY() - y) <= 2;
+            return l.getBlockX() > minX && l.getBlockX() < maxX
+                    && l.getBlockZ() > minZ && l.getBlockZ() < maxZ
+                    && Math.abs(l.getBlockY() - y) <= 2;
         }
+        boolean hasWater() { return true; }
     }
 }
