@@ -19,12 +19,14 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.RecipeChoice;
 import org.bukkit.inventory.ShapedRecipe;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.UUID;
 
@@ -40,6 +42,7 @@ public final class MobBucketManager implements Listener {
         this.mobDataKey = new NamespacedKey(plugin, "mob_data");
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
         registerRecipe();
+        registerAnimalFarmCrafts();
     }
 
     private void registerRecipe() {
@@ -49,6 +52,46 @@ public final class MobBucketManager implements Listener {
         recipe.shape("BBB");
         recipe.setIngredient('B', Material.BUCKET);
         plugin.getServer().addRecipe(recipe);
+    }
+
+    /** Дополнительные рецепты AnimalFarm. */
+    private void registerAnimalFarmCrafts() {
+        // Бирка: кожа + нить.
+        NamespacedKey nameTagKey = new NamespacedKey(plugin, "craft_name_tag");
+        plugin.getServer().removeRecipe(nameTagKey);
+        ShapedRecipe nameTag = new ShapedRecipe(nameTagKey, new ItemStack(Material.NAME_TAG));
+        nameTag.shape("LS", "  ");
+        nameTag.setIngredient('L', Material.LEATHER);
+        nameTag.setIngredient('S', Material.STRING);
+        plugin.getServer().addRecipe(nameTag);
+
+        // Поводок: кожа, кожа, нить в следующей строке.
+        NamespacedKey leadKey = new NamespacedKey(plugin, "craft_lead");
+        plugin.getServer().removeRecipe(leadKey);
+        ShapedRecipe lead = new ShapedRecipe(leadKey, new ItemStack(Material.LEAD));
+        lead.shape("LL", "S ");
+        lead.setIngredient('L', Material.LEATHER);
+        lead.setIngredient('S', Material.STRING);
+        plugin.getServer().addRecipe(lead);
+
+        // Шерсть любого цвета -> 4 нити.
+        NamespacedKey stringKey = new NamespacedKey(plugin, "craft_wool_to_string");
+        plugin.getServer().removeRecipe(stringKey);
+        ShapedRecipe string = new ShapedRecipe(stringKey, new ItemStack(Material.STRING, 4));
+        string.shape("W");
+        string.setIngredient('W', new RecipeChoice.MaterialChoice(Arrays.stream(Material.values())
+                .filter(material -> material.name().endsWith("_WOOL"))
+                .toList()));
+        plugin.getServer().addRecipe(string);
+
+        // Bundle: три кожи по схеме ведра и нить по центру.
+        NamespacedKey bundleKey = new NamespacedKey(plugin, "craft_bundle");
+        plugin.getServer().removeRecipe(bundleKey);
+        ShapedRecipe bundle = new ShapedRecipe(bundleKey, new ItemStack(Material.BUNDLE));
+        bundle.shape("L L", " S ", " L ");
+        bundle.setIngredient('L', Material.LEATHER);
+        bundle.setIngredient('S', Material.STRING);
+        plugin.getServer().addRecipe(bundle);
     }
 
     private ItemStack createEmptyBucket() {
@@ -81,14 +124,10 @@ public final class MobBucketManager implements Listener {
         Player player = event.getPlayer();
         ItemStack bucket = player.getInventory().getItemInMainHand();
         if (!isBucket(bucket) || hasMob(bucket)) return;
-
         Entity target = event.getRightClicked();
         if (!(target instanceof LivingEntity living) || target instanceof Player) return;
         if (target.isDead()) return;
-
-        // Не даём переносить самого игрока и служебные сущности без живого моба.
         if (target instanceof org.bukkit.entity.ArmorStand) return;
-
         event.setCancelled(true);
         ItemStack filled = createFilledBucket(living);
         target.remove();
@@ -102,7 +141,6 @@ public final class MobBucketManager implements Listener {
         Player player = event.getPlayer();
         ItemStack bucket = player.getInventory().getItemInMainHand();
         if (!hasMob(bucket)) return;
-
         event.setCancelled(true);
         Block clicked = event.getClickedBlock();
         if (clicked == null || event.getBlockFace() == null) return;
@@ -111,12 +149,10 @@ public final class MobBucketManager implements Listener {
             player.sendMessage(color("&8[&6AnimalFarm&8] &cНедостаточно места, чтобы выпустить моба."));
             return;
         }
-
         String data = getMobData(bucket);
         if (data == null) return;
         String[] parts = decode(data);
         if (parts == null || parts.length < 4) return;
-
         try {
             org.bukkit.entity.EntityType type = org.bukkit.entity.EntityType.valueOf(parts[0]);
             if (!type.isAlive() || type == org.bukkit.entity.EntityType.PLAYER) return;
@@ -144,8 +180,7 @@ public final class MobBucketManager implements Listener {
         if (meta == null) return item;
         String customName = entity.getCustomName() == null ? "" : entity.getCustomName().replace("|", "");
         String age = entity instanceof Ageable ageable ? Integer.toString(ageable.getAge()) : "0";
-        String owner = entity instanceof Tameable tameable && tameable.isTamed() && tameable.getOwner() != null
-                ? tameable.getOwner().getUniqueId().toString() : "";
+        String owner = entity instanceof Tameable tameable && tameable.isTamed() && tameable.getOwner() != null ? tameable.getOwner().getUniqueId().toString() : "";
         String raw = entity.getType().name() + "|" + customName + "|" + age + "|" + owner;
         String encoded = Base64.getEncoder().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
         meta.getPersistentDataContainer().set(mobDataKey, PersistentDataType.STRING, encoded);
@@ -161,11 +196,8 @@ public final class MobBucketManager implements Listener {
     }
 
     private String[] decode(String data) {
-        try {
-            return new String(Base64.getDecoder().decode(data), StandardCharsets.UTF_8).split("\\|", -1);
-        } catch (IllegalArgumentException ex) {
-            return null;
-        }
+        try { return new String(Base64.getDecoder().decode(data), StandardCharsets.UTF_8).split("\\|", -1); }
+        catch (IllegalArgumentException ex) { return null; }
     }
 
     private boolean isFree(Location location) {
@@ -179,7 +211,5 @@ public final class MobBucketManager implements Listener {
         return name.substring(0, 1).toUpperCase() + name.substring(1);
     }
 
-    private String color(String text) {
-        return ChatColor.translateAlternateColorCodes('&', text);
-    }
+    private String color(String text) { return ChatColor.translateAlternateColorCodes('&', text); }
 }
