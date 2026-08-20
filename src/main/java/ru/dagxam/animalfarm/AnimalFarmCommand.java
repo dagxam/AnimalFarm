@@ -14,6 +14,7 @@ public final class AnimalFarmCommand implements CommandExecutor, TabCompleter {
 
     public AnimalFarmCommand(AnimalFarmPlugin plugin) {
         this.plugin = plugin;
+        new MobBucketManager(plugin);
     }
 
     @Override
@@ -22,12 +23,10 @@ public final class AnimalFarmCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(color(plugin.getConfig().getString("messages.prefix", "") + plugin.getConfig().getString("messages.no-permission", "&cНет прав.")));
             return true;
         }
-
         if (args.length == 0) {
             sender.sendMessage(color("&8[&6AnimalFarm&8] &fИспользование: &e/animalfarm <reload|info>"));
             return true;
         }
-
         switch (args[0].toLowerCase()) {
             case "reload" -> {
                 plugin.reloadPluginConfig();
@@ -42,9 +41,7 @@ public final class AnimalFarmCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            return List.of("reload", "info").stream()
-                    .filter(value -> value.startsWith(args[0].toLowerCase()))
-                    .toList();
+            return List.of("reload", "info").stream().filter(value -> value.startsWith(args[0].toLowerCase())).toList();
         }
         return List.of();
     }
