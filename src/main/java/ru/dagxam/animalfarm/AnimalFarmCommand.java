@@ -9,12 +9,12 @@ import org.bukkit.command.TabCompleter;
 import java.util.List;
 
 public final class AnimalFarmCommand implements CommandExecutor, TabCompleter {
-
     private final AnimalFarmPlugin plugin;
 
     public AnimalFarmCommand(AnimalFarmPlugin plugin) {
         this.plugin = plugin;
         new MobBucketManager(plugin);
+        new ProductionChestManager(plugin);
     }
 
     @Override
@@ -40,9 +40,7 @@ public final class AnimalFarmCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        if (args.length == 1) {
-            return List.of("reload", "info").stream().filter(value -> value.startsWith(args[0].toLowerCase())).toList();
-        }
+        if (args.length == 1) return List.of("reload", "info").stream().filter(value -> value.startsWith(args[0].toLowerCase())).toList();
         return List.of();
     }
 
