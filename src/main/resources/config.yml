@@ -65,16 +65,16 @@ drops:
 # DailyBreedingManager размножает животных строго один раз после смены игровых суток.
 feeding:
   cow:
-    enabled: true
+    enabled: false
     foods: [WHEAT]
   sheep:
-    enabled: true
+    enabled: false
     foods: [WHEAT]
   goat:
-    enabled: true
+    enabled: false
     foods: [WHEAT]
   chicken:
-    enabled: true
+    enabled: false
     foods:
       - WHEAT_SEEDS
       - BEETROOT_SEEDS
