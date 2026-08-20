@@ -29,7 +29,7 @@ milking:
     sheep: true
     goat: true
 
-# Производство теперь не засоряет кормушку.
+# Производство не засоряет кормушку.
 # При наличии сундука на заборе молоко, шерсть и яйца собираются туда раз в игровые сутки.
 # Без сундука молоко и шерсть собираются вручную, а яйца остаются на полу загона.
 production:
@@ -64,18 +64,20 @@ drops:
   chicken:
     feather: { min: 3, max: 6 }
 
+# Старый механизм размножения отключён.
+# Размножение выполняет DailyBreedingManager строго один раз после смены игровых суток.
 feeding:
   cow:
-    enabled: true
+    enabled: false
     foods: [WHEAT]
   sheep:
-    enabled: true
+    enabled: false
     foods: [WHEAT]
   goat:
-    enabled: true
+    enabled: false
     foods: [WHEAT]
   chicken:
-    enabled: true
+    enabled: false
     foods:
       - WHEAT_SEEDS
       - BEETROOT_SEEDS
