@@ -4,30 +4,23 @@
 
 feeder:
   enabled: true
-
-  # Проверка животных каждые 2 секунды.
-  # Само размножение выполняется обычным ванильным AI Minecraft.
   check-interval-seconds: 2
-
-  # Животное должно физически подойти к кормушке.
   eating-distance: 2.5
   path-speed: 1.1
-
-  # Не больше двух автоматических кормлений за один цикл.
   max-feedings-per-cycle: 2
-
-  # Одно полное ведро воды хватает на 10 автоматических кормлений.
-  # Ведро находится прямо внутри бочки и после расходования превращается в пустое.
   water-feedings-per-bucket: 10
 
 pen:
-  # Максимальный радиус определения закрытого загона.
   max-radius: 16
   vertical-range: 5
 
 hud:
   enabled: true
   range: 6
+
+# Ведро для переноса любых живых мобов.
+mob-bucket:
+  enabled: true
 
 milking:
   enabled: true
@@ -50,7 +43,6 @@ drops:
     bone: { min: 1, max: 1 }
 
   goat:
-    # Предмет технически использует MUTTON, но получает имя «Козлятина».
     meat: { min: 1, max: 2 }
     leather: { min: 0, max: 2 }
     bone: { min: 1, max: 1 }
@@ -78,7 +70,6 @@ feeding:
       - TORCHFLOWER_SEEDS
       - PITCHER_POD
 
-# В активном загоне курицы получают дополнительные яйца при обычной кладке.
 chicken:
   pen-extra-eggs:
     min: 1
