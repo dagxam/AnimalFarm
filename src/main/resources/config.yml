@@ -7,7 +7,11 @@ feeder:
   check-interval-seconds: 2
   eating-distance: 2.5
   path-speed: 1.1
-  max-feedings-per-cycle: 2
+
+  # Максимум пар, которые кормушка может размножить за один игровой день.
+  max-breeding-pairs-per-day: 10
+
+  # Одного полного ведра воды хватает на несколько автоматических кормлений.
   water-feedings-per-bucket: 10
 
 pen:
@@ -18,9 +22,12 @@ hud:
   enabled: true
   range: 6
 
+# Специальное ведро для переноса любых живых мобов.
+# Оно не используется для дойки и не помещается в кормушку.
 mob-bucket:
   enabled: true
 
+# Ручная дойка. Автоматическая дойка в загоне работает отдельно.
 milking:
   enabled: true
   cooldown-seconds: 30
@@ -28,6 +35,16 @@ milking:
     cow: true
     sheep: true
     goat: true
+
+# Автоматический суточный сбор в кормушку.
+# Норма применяется КАЖДОМУ взрослому животному.
+production:
+  chicken:
+    eggs-min: 5
+    eggs-max: 10
+  dairy:
+    milk-min: 5
+    milk-max: 10
 
 drops:
   cow:
@@ -66,11 +83,6 @@ feeding:
       - TORCHFLOWER_SEEDS
       - PITCHER_POD
 
-chicken:
-  pen-extra-eggs:
-    min: 1
-    max: 2
-
 messages:
   prefix: "&8[&6AnimalFarm&8] &r"
   no-permission: "&cУ вас нет прав для выполнения этой команды."
@@ -79,6 +91,7 @@ messages:
   milk-cow: "&aВы надоили корову."
   milk-sheep: "&aВы надоили барана."
   milk-goat: "&aВы надоили козу."
+  milk-baby: "&aМалыш выпил молоко. &7Два кормления — и он вырастет."
   milk-cooldown: "&eЭто животное пока не даёт молоко."
   water-added: "&bВода добавлена в кормушку. &7Пустое ведро возвращено."
   water-full: "&eВ кормушке нет свободного места для воды."
