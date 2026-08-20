@@ -9,7 +9,6 @@ import org.bukkit.block.BlockState;
 import org.bukkit.entity.Animals;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
-import org.bukkit.entity.Chicken;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -40,14 +39,12 @@ public final class FeederProductionManager implements Listener {
     private final JavaPlugin plugin;
     private final NamespacedKey feederKey;
     private final NamespacedKey milkProductionDayKey;
-    private final NamespacedKey milkedDayKey;
     private final Map<UUID, Long> milkedAnimals = new HashMap<>();
 
     public FeederProductionManager(JavaPlugin plugin) {
         this.plugin = plugin;
         this.feederKey = new NamespacedKey(plugin, "feeder_block");
         this.milkProductionDayKey = new NamespacedKey(plugin, "milk_production_day");
-        this.milkedDayKey = new NamespacedKey(plugin, "milked_day");
 
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
 
@@ -92,8 +89,8 @@ public final class FeederProductionManager implements Listener {
         if (emptyBuckets <= 0) return;
 
         int milkBuckets = 0;
-        int min = Math.max(0, plugin.getConfig().getInt("production.dairy.milk-min", 2));
-        int max = Math.max(min, plugin.getConfig().getInt("production.dairy.milk-max", 3));
+        int min = Math.max(0, plugin.getConfig().getInt("milking.milk-min", 2));
+        int max = Math.max(min, plugin.getConfig().getInt("milking.milk-max", 3));
 
         for (Entity entity : barrel.getWorld().getNearbyEntities(
                 barrel.getBlock().getLocation(), 17, 6, 17)) {
@@ -144,7 +141,22 @@ public final class FeederProductionManager implements Listener {
             int add = Math.min(amount, MILK_MAX_STACK);
             ItemStack stack = milk.clone();
             stack.setAmount(add);
-            inventory.addItem(stack);
+            Map<Integer, ItemStack> leftovers = inventory.addItem(stack);
+            if (!leftovers.isEmpty()) {
+                // Если кормушка заполнена, не теряем молоко: возвращаем пустые ведра.
+                int returned = 0;
+                for (ItemStack left : leftovers.values()) returned += left.getAmount();
+                if (returned > 0) addEmptyBuckets(inventory, returned);
+                break;
+            }
+            amount -= add;
+        }
+    }
+
+    private void addEmptyBuckets(Inventory inventory, int amount) {
+        while (amount > 0) {
+            int add = Math.min(amount, 16);
+            inventory.addItem(new ItemStack(Material.BUCKET, add));
             amount -= add;
         }
     }
@@ -178,19 +190,13 @@ public final class FeederProductionManager implements Listener {
         }
     }
 
-    /**
-     * Обычные яйца оставляем ванильными: они появляются на полу.
-     * AnimalFarm больше не перехватывает их и не складывает автоматически.
-     */
+    /** Яйца остаются обычными и могут появляться на полу. */
     @EventHandler(ignoreCancelled = true)
     public void onChickenEggDrop(EntityDropItemEvent event) {
-        // Ничего не делаем специально.
+        // Ничего не перехватываем.
     }
 
-    /**
-     * Ограничивает ручную дойку одного животного одним разом за игровые сутки.
-     * Срабатывает раньше основного обработчика AnimalFarmPlugin.
-     */
+    /** Один и тот же взрослый моб может быть надоен вручную только один раз за игровые сутки. */
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onDailyManualMilking(PlayerInteractEntityEvent event) {
         if (event.getHand() != EquipmentSlot.HAND) return;
