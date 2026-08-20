@@ -2,21 +2,21 @@
 # AnimalFarm — основная конфигурация
 # ============================================================
 
-# Кормушка.
-# Кормушка выглядит как обычная ванильная бочка.
-# Получается крафтом из 4 бочек.
 feeder:
   enabled: true
   interval-seconds: 5
   max-water: 64
   max-births-per-cycle: 1
 
-# Автоматический загон.
+# Загон: замкнутые заборы и ровно одна калитка.
 pen:
   max-radius: 16
-  # Обязательны замкнутые заборы и ровно одна закрытая калитка.
 
-# Доение животных.
+# Информация при наведении на кормушку.
+hud:
+  enabled: true
+  range: 6
+
 milking:
   enabled: true
   cooldown-seconds: 30
@@ -25,64 +25,40 @@ milking:
     sheep: true
     goat: true
 
-# Дроп животных.
 drops:
   cow:
-    meat:
-      min: 1
-      max: 3
-    leather:
-      min: 0
-      max: 2
-    bone:
-      min: 0
-      max: 2
+    meat: { min: 1, max: 3 }
+    leather: { min: 0, max: 2 }
+    bone: { min: 2, max: 2 }
 
   sheep:
-    meat:
-      min: 1
-      max: 3
-    leather:
-      min: 0
-      max: 2
-    wool:
-      min: 1
-      max: 3
-    bone:
-      min: 0
-      max: 2
+    meat: { min: 1, max: 3 }
+    leather: { min: 0, max: 2 }
+    wool: { min: 1, max: 3 }
+    bone: { min: 1, max: 1 }
 
   goat:
-    meat:
-      min: 1
-      max: 2
-    leather:
-      min: 0
-      max: 2
-    bone:
-      min: 0
-      max: 2
+    # Предмет технически использует MUTTON, но получает имя «Козлятина».
+    meat: { min: 1, max: 2 }
+    leather: { min: 0, max: 2 }
+    bone: { min: 1, max: 1 }
 
-# Корм для автоматического размножения.
+  chicken:
+    feather: { min: 2, max: 5 }
+
+# Корм для автоматического кормления.
 feeding:
   cow:
     enabled: true
-    foods:
-      - WHEAT
-
+    foods: [WHEAT]
   sheep:
     enabled: true
-    foods:
-      - WHEAT
-
+    foods: [WHEAT]
   goat:
     enabled: true
-    foods:
-      - WHEAT
-
+    foods: [WHEAT]
   chicken:
     enabled: true
-    # Семена, которые можно использовать для автоматического кормления кур.
     foods:
       - WHEAT_SEEDS
       - BEETROOT_SEEDS
@@ -91,23 +67,24 @@ feeding:
       - TORCHFLOWER_SEEDS
       - PITCHER_POD
 
-# Сообщения игрокам.
-# Команды и permissions остаются на английском.
+# Курицы в активном загоне несутся чаще.
+chicken:
+  pen-extra-eggs:
+    min: 1
+    max: 2
+
 messages:
   prefix: "&8[&6AnimalFarm&8] &r"
   no-permission: "&cУ вас нет прав для выполнения этой команды."
   reloaded: "&aКонфигурация успешно перезагружена."
   info: "&fAnimalFarm &7— &eсистема животноводства и автоматических загонов."
-
   milk-cow: "&aВы надоили корову."
   milk-sheep: "&aВы надоили барана."
   milk-goat: "&aВы надоили козу."
   milk-cooldown: "&eЭто животное пока не даёт молоко."
-
   water-added: "&bВода добавлена в кормушку. &7Пустое ведро возвращено."
   water-full: "&eКормушка уже заполнена водой."
-
   pen-open: "&cЗагон не закрыт. &7Полностью замкните его забором и оставьте ровно одну закрытую калитку."
   pen-no-gate: "&cЗагон не готов. &7Нужна ровно одна закрытая калитка."
   pen-many-gates: "&cЗагон не готов. &7В загоне должна быть только одна калитка."
-  pen-ready: "&aЗагон активен. &7Животных: &e%animals% &7| Вода: &b%water% &7| Пшеница: &e%wheat% &7| Семена: &e%seeds%&7."
+  pen-ready: "&aЗагон активен."
