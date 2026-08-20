@@ -28,24 +28,27 @@ public final class RecipeManager {
     }
 
     private void registerNameTag() {
+        // Как на скриншоте: нить сверху, кожа под ней.
         ShapedRecipe recipe = new ShapedRecipe(key("name_tag"), new ItemStack(Material.NAME_TAG));
-        recipe.shape("LS", "  ", "  ");
+        recipe.shape("S", "L", " ");
         recipe.setIngredient('L', Material.LEATHER);
         recipe.setIngredient('S', Material.STRING);
         add(recipe);
     }
 
     private void registerLead() {
+        // Как на скриншоте: две кожи и нить в одной горизонтальной линии.
         ShapedRecipe recipe = new ShapedRecipe(key("lead"), new ItemStack(Material.LEAD));
-        recipe.shape("LLS", "   ", "   ");
+        recipe.shape("   ", "LLS", "   ");
         recipe.setIngredient('L', Material.LEATHER);
         recipe.setIngredient('S', Material.STRING);
         add(recipe);
     }
 
     private void registerBundle() {
+        // Форма ведра: кожа слева/справа, третья кожа снизу по центру, нить в центре.
         ShapedRecipe recipe = new ShapedRecipe(key("bundle"), new ItemStack(Material.BUNDLE));
-        recipe.shape("L L", " S ", " L ");
+        recipe.shape("   ", "LSL", " L ");
         recipe.setIngredient('L', Material.LEATHER);
         recipe.setIngredient('S', Material.STRING);
         add(recipe);
@@ -60,8 +63,9 @@ public final class RecipeManager {
     }
 
     private void registerBrush() {
+        // Как на скриншоте: шерсть сверху, палка прямо под ней.
         ShapedRecipe recipe = new ShapedRecipe(key("brush"), new ItemStack(Material.BRUSH));
-        recipe.shape("W", "S", " ");
+        recipe.shape(" ", "W", "S");
         recipe.setIngredient('W', new RecipeChoice.MaterialChoice(allWool()));
         recipe.setIngredient('S', Material.STICK);
         add(recipe);
