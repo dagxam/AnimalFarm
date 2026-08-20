@@ -16,6 +16,7 @@ public final class AnimalFarmCommand implements CommandExecutor, TabCompleter {
         new MobBucketManager(plugin);
         new ProductionChestManager(plugin);
         new RecipeManager(plugin);
+        new DailyBreedingManager(plugin);
     }
 
     @Override
