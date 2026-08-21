@@ -83,6 +83,9 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
     private final Set<FeederKey> farmObjects = ConcurrentHashMap.newKeySet();
     private final Map<FeederKey, CachedArea> areaCache = new ConcurrentHashMap<>();
     private final Set<UUID> hudVisible = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, FeederKey> hudTargets = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> hudLastSeenTick = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> hudLastRefreshTick = new ConcurrentHashMap<>();
     private final Set<UUID> pendingPlayerBucketNormalize = ConcurrentHashMap.newKeySet();
 
     private long serverTick;
@@ -146,6 +149,9 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
         farmObjects.clear();
         areaCache.clear();
         hudVisible.clear();
+        hudTargets.clear();
+        hudLastSeenTick.clear();
+        hudLastRefreshTick.clear();
         pendingPlayerBucketNormalize.clear();
 
         getLogger().info("AnimalFarm выключен.");
@@ -263,7 +269,7 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
             meta.setDisplayName(color("&bАквариумная полка"));
 
             meta.setLore(List.of(
-                    color("&7Отдельный объект для аквариума."),
+                    color("&7Полка для крепления к стенке аквариума."),
                     color("&7Крафтится из 4 обычных полок любой породы дерева."),
                     color("&7Достаточно установить одну полку."),
                     color("&7Семена и другая еда для рыб хранятся внутри."),
@@ -964,39 +970,87 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
                 );
 
                 for (Player player : getServer().getOnlinePlayers()) {
+                    UUID uuid = player.getUniqueId();
                     Block target = player.getTargetBlockExact(range);
 
                     if (target == null || !isAnyFarmObject(target)) {
-                        clearHud(player);
+                        clearHudIfCursorReallyLeft(player);
                         continue;
                     }
 
                     if (!(target.getState() instanceof Barrel barrel)) {
-                        clearHud(player);
+                        clearHudIfCursorReallyLeft(player);
                         continue;
                     }
 
-                    AreaStatus area = getArea(target.getLocation());
+                    FeederKey targetKey = FeederKey.of(target.getLocation());
+                    FeederKey previousTarget = hudTargets.get(uuid);
+
                     boolean aquariumShelf = isAquariumShelfBlock(target);
 
-                    player.sendActionBar(
-                            formatHud(
-                                    area,
-                                    barrel,
-                                    aquariumShelf
-                            )
-                    );
+                    if (targetKey.equals(previousTarget)) {
+                        hudLastSeenTick.put(uuid, serverTick);
 
-                    hudVisible.add(player.getUniqueId());
+                        // Для обычной кормушки — редкое обновление.
+                        // Для аквариумной полки повторный HUD вообще не нужен.
+                        if (!aquariumShelf) {
+                            long lastRefresh = hudLastRefreshTick.getOrDefault(
+                                    uuid,
+                                    Long.MIN_VALUE
+                            );
+
+                            if (serverTick - lastRefresh >= 30L) {
+                                AreaStatus area = getArea(target.getLocation());
+                                player.sendActionBar(formatHud(area, barrel, false));
+                                hudLastRefreshTick.put(uuid, serverTick);
+                            }
+                        }
+
+                        continue;
+                    }
+
+                    // При наведении на полку показываем только название.
+                    if (aquariumShelf) {
+                        player.sendActionBar(color("&bАквариумная полка"));
+                    } else {
+                        AreaStatus area = getArea(target.getLocation());
+                        player.sendActionBar(formatHud(area, barrel, false));
+                    }
+
+                    hudVisible.add(uuid);
+                    hudTargets.put(uuid, targetKey);
+                    hudLastSeenTick.put(uuid, serverTick);
+                    hudLastRefreshTick.put(uuid, serverTick);
                 }
             }
         }.runTaskTimer(this, 1L, 5L);
     }
 
-    private void clearHud(Player player) {
-        if (hudVisible.remove(player.getUniqueId())) {
-            player.sendActionBar("");
+    private void clearHudIfCursorReallyLeft(Player player) {
+        UUID uuid = player.getUniqueId();
+
+        if (!hudVisible.contains(uuid)) {
+            return;
         }
+
+        long lastSeen = hudLastSeenTick.getOrDefault(uuid, Long.MIN_VALUE);
+
+        // Небольшой запас защищает от краткого target=null,
+        // когда луч курсора на долю секунды перескакивает между гранями блока.
+        if (serverTick - lastSeen >= 10L) {
+            clearHud(player);
+        }
+    }
+
+    private void clearHud(Player player) {
+        UUID uuid = player.getUniqueId();
+
+        hudVisible.remove(uuid);
+        hudTargets.remove(uuid);
+        hudLastSeenTick.remove(uuid);
+        hudLastRefreshTick.remove(uuid);
+
+        player.sendActionBar("");
     }
 
     private void clearAllHud() {
@@ -1171,21 +1225,22 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
          * Подходят семена, морская трава, ламинария и морские огурцы.
          */
         if (lastFeedDay < day) {
-            Material food = findFishFood(
-                    shelf.getInventory()
-            );
+            Material food = findFishFood(shelf.getInventory());
 
-            if (food != null
-                    && consumeAmount(
-                    shelf.getInventory(),
-                    food,
-                    dailyFoodAmount(food, "fish")
-            )) {
-                shelf.getPersistentDataContainer().set(
-                        dailyFeedDayKey,
-                        PersistentDataType.LONG,
-                        day
+            if (food != null) {
+                int consumed = consumeUpTo(
+                        shelf.getInventory(),
+                        food,
+                        dailyFoodAmount(food, "fish")
                 );
+
+                if (consumed > 0) {
+                    shelf.getPersistentDataContainer().set(
+                            dailyFeedDayKey,
+                            PersistentDataType.LONG,
+                            day
+                    );
+                }
             }
         }
 
@@ -1223,13 +1278,16 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
                     inventory
             );
 
-            if (food != null
-                    && consumeAmount(
-                    inventory,
-                    food,
-                    dailyFoodAmount(food, animal)
-            )) {
-                fed = true;
+            if (food != null) {
+                int consumed = consumeUpTo(
+                        inventory,
+                        food,
+                        dailyFoodAmount(food, animal)
+                );
+
+                if (consumed > 0) {
+                    fed = true;
+                }
             }
         }
 
@@ -1614,6 +1672,46 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
         }
     }
 
+    private int consumeUpTo(
+            Inventory inventory,
+            Material material,
+            int requestedAmount
+    ) {
+        if (inventory == null || material == null || requestedAmount <= 0) {
+            return 0;
+        }
+
+        int remaining = requestedAmount;
+        int consumed = 0;
+
+        for (int slot = 0;
+             slot < inventory.getSize() && remaining > 0;
+             slot++) {
+
+            ItemStack item = inventory.getItem(slot);
+
+            if (item == null
+                    || item.getType() != material
+                    || item.getAmount() <= 0) {
+                continue;
+            }
+
+            int take = Math.min(item.getAmount(), remaining);
+
+            if (take >= item.getAmount()) {
+                inventory.setItem(slot, null);
+            } else {
+                item.setAmount(item.getAmount() - take);
+                inventory.setItem(slot, item);
+            }
+
+            remaining -= take;
+            consumed += take;
+        }
+
+        return consumed;
+    }
+
     private boolean consumeAmount(
             Inventory inventory,
             Material material,
@@ -1751,9 +1849,11 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
             Barrel barrel,
             boolean aquariumShelf
     ) {
-        String base = aquariumShelf
-                ? "&bАквариумная полка &7| "
-                : "&6Кормушка &7| ";
+        if (aquariumShelf) {
+            return color("&bАквариумная полка");
+        }
+
+        String base = "&6Кормушка &7| ";
 
         if (!status.valid()) {
             return color(
