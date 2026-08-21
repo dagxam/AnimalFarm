@@ -964,57 +964,42 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
                     return;
                 }
 
-                int range = Math.max(
-                        1,
-                        getConfig().getInt("hud.range", 6)
-                );
+                int range = Math.max(1, getConfig().getInt("hud.range", 6));
 
                 for (Player player : getServer().getOnlinePlayers()) {
                     UUID uuid = player.getUniqueId();
                     Block target = player.getTargetBlockExact(range);
 
-                    if (target == null || !isAnyFarmObject(target)) {
-                        clearHudIfCursorReallyLeft(player);
-                        continue;
-                    }
+                    if (target == null
+                            || !isAnyFarmObject(target)
+                            || !(target.getState() instanceof Barrel barrel)) {
 
-                    if (!(target.getState() instanceof Barrel barrel)) {
                         clearHudIfCursorReallyLeft(player);
                         continue;
                     }
 
                     FeederKey targetKey = FeederKey.of(target.getLocation());
-                    FeederKey previousTarget = hudTargets.get(uuid);
 
-                    boolean aquariumShelf = isAquariumShelfBlock(target);
-
-                    if (targetKey.equals(previousTarget)) {
+                    // Пока игрок продолжает смотреть на ту же кормушку/полку,
+                    // HUD вообще НЕ отправляется повторно.
+                    // Поэтому обычная кормушка не моргает и показывает
+                    // последнюю информацию до следующего наведения.
+                    if (targetKey.equals(hudTargets.get(uuid))) {
                         hudLastSeenTick.put(uuid, serverTick);
-
-                        // Для обычной кормушки — редкое обновление.
-                        // Для аквариумной полки повторный HUD вообще не нужен.
-                        if (!aquariumShelf) {
-                            long lastRefresh = hudLastRefreshTick.getOrDefault(
-                                    uuid,
-                                    Long.MIN_VALUE
-                            );
-
-                            if (serverTick - lastRefresh >= 30L) {
-                                AreaStatus area = getArea(target.getLocation());
-                                player.sendActionBar(formatHud(area, barrel, false));
-                                hudLastRefreshTick.put(uuid, serverTick);
-                            }
-                        }
-
                         continue;
                     }
 
-                    // При наведении на полку показываем только название.
+                    boolean aquariumShelf = isAquariumShelfBlock(target);
+                    AreaStatus area = getArea(target.getLocation());
+
                     if (aquariumShelf) {
-                        player.sendActionBar(color("&bАквариумная полка"));
+                        player.sendActionBar(
+                                formatAquariumHud(area, barrel)
+                        );
                     } else {
-                        AreaStatus area = getArea(target.getLocation());
-                        player.sendActionBar(formatHud(area, barrel, false));
+                        player.sendActionBar(
+                                formatHud(area, barrel, false)
+                        );
                     }
 
                     hudVisible.add(uuid);
@@ -1026,6 +1011,36 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
         }.runTaskTimer(this, 1L, 5L);
     }
 
+    private boolean isFish(EntityType type) {
+        return switch (type) {
+            case COD, SALMON, PUFFERFISH, TROPICAL_FISH -> true;
+            default -> false;
+        };
+    }
+
+    private String formatAquariumHud(
+            AreaStatus status,
+            Barrel shelf
+    ) {
+        int fishCount = (int) status.animals().stream()
+                .filter(entity -> isFish(entity.getType()))
+                .count();
+
+        int foodCount = 0;
+
+        for (ItemStack item : shelf.getInventory().getContents()) {
+            if (item != null && item.getAmount() > 0) {
+                foodCount += item.getAmount();
+            }
+        }
+
+        return color(
+                "&bАквариумная полка"
+                        + " &7| &fРыб: &e" + fishCount
+                        + " &7| &fКорма: &a" + foodCount
+        );
+    }
+
     private void clearHudIfCursorReallyLeft(Player player) {
         UUID uuid = player.getUniqueId();
 
@@ -1035,8 +1050,8 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
 
         long lastSeen = hudLastSeenTick.getOrDefault(uuid, Long.MIN_VALUE);
 
-        // Небольшой запас защищает от краткого target=null,
-        // когда луч курсора на долю секунды перескакивает между гранями блока.
+        // Короткая задержка защищает от ложного исчезновения,
+        // когда прицел на мгновение теряет блок.
         if (serverTick - lastSeen >= 10L) {
             clearHud(player);
         }
