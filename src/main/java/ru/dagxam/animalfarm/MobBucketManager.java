@@ -13,7 +13,6 @@ import org.bukkit.entity.Tameable;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
-import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
@@ -30,7 +29,7 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.UUID;
 
-/** Переносит любых живых мобов в специальном ведре. Игроки не переносятся. */
+/** Переносит живых мобов в специальном ведре. Игроки и ArmorStand исключены. */
 public final class MobBucketManager implements Listener {
     private final JavaPlugin plugin;
     private final NamespacedKey bucketKey;
@@ -54,9 +53,7 @@ public final class MobBucketManager implements Listener {
         plugin.getServer().addRecipe(recipe);
     }
 
-    /** Дополнительные рецепты AnimalFarm. */
     private void registerAnimalFarmCrafts() {
-        // Бирка: кожа + нить.
         NamespacedKey nameTagKey = new NamespacedKey(plugin, "craft_name_tag");
         plugin.getServer().removeRecipe(nameTagKey);
         ShapedRecipe nameTag = new ShapedRecipe(nameTagKey, new ItemStack(Material.NAME_TAG));
@@ -65,7 +62,6 @@ public final class MobBucketManager implements Listener {
         nameTag.setIngredient('S', Material.STRING);
         plugin.getServer().addRecipe(nameTag);
 
-        // Поводок: кожа, кожа, нить в следующей строке.
         NamespacedKey leadKey = new NamespacedKey(plugin, "craft_lead");
         plugin.getServer().removeRecipe(leadKey);
         ShapedRecipe lead = new ShapedRecipe(leadKey, new ItemStack(Material.LEAD));
@@ -74,7 +70,6 @@ public final class MobBucketManager implements Listener {
         lead.setIngredient('S', Material.STRING);
         plugin.getServer().addRecipe(lead);
 
-        // Шерсть любого цвета -> 4 нити.
         NamespacedKey stringKey = new NamespacedKey(plugin, "craft_wool_to_string");
         plugin.getServer().removeRecipe(stringKey);
         ShapedRecipe string = new ShapedRecipe(stringKey, new ItemStack(Material.STRING, 4));
@@ -84,7 +79,6 @@ public final class MobBucketManager implements Listener {
                 .toList()));
         plugin.getServer().addRecipe(string);
 
-        // Bundle: три кожи по схеме ведра и нить по центру.
         NamespacedKey bundleKey = new NamespacedKey(plugin, "craft_bundle");
         plugin.getServer().removeRecipe(bundleKey);
         ShapedRecipe bundle = new ShapedRecipe(bundleKey, new ItemStack(Material.BUNDLE));
@@ -125,9 +119,7 @@ public final class MobBucketManager implements Listener {
         ItemStack bucket = player.getInventory().getItemInMainHand();
         if (!isBucket(bucket) || hasMob(bucket)) return;
         Entity target = event.getRightClicked();
-        if (!(target instanceof LivingEntity living) || target instanceof Player) return;
-        if (target.isDead()) return;
-        if (target instanceof org.bukkit.entity.ArmorStand) return;
+        if (!(target instanceof LivingEntity living) || target instanceof Player || target instanceof org.bukkit.entity.ArmorStand || target.isDead()) return;
         event.setCancelled(true);
         ItemStack filled = createFilledBucket(living);
         target.remove();
@@ -150,8 +142,7 @@ public final class MobBucketManager implements Listener {
             return;
         }
         String data = getMobData(bucket);
-        if (data == null) return;
-        String[] parts = decode(data);
+        String[] parts = data == null ? null : decode(data);
         if (parts == null || parts.length < 4) return;
         try {
             org.bukkit.entity.EntityType type = org.bukkit.entity.EntityType.valueOf(parts[0]);
@@ -163,7 +154,8 @@ public final class MobBucketManager implements Listener {
                 if (living instanceof Tameable tameable && !parts[3].isEmpty()) {
                     try {
                         UUID owner = UUID.fromString(parts[3]);
-                        if (tameable.isTamed()) tameable.setOwner(plugin.getServer().getOfflinePlayer(owner));
+                        tameable.setOwner(plugin.getServer().getOfflinePlayer(owner));
+                        tameable.setTamed(true);
                     } catch (IllegalArgumentException ignored) { }
                 }
             }
