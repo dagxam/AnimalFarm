@@ -3,6 +3,7 @@ package ru.dagxam.animalfarm;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.block.Barrel;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
@@ -22,10 +23,12 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class FarmObjectManager implements Listener {
 
     private final AnimalFarmPlugin plugin;
+    private final FarmAreaAnalyzer areaAnalyzer;
     private final Set<FarmObjectKey> objects = ConcurrentHashMap.newKeySet();
 
-    public FarmObjectManager(AnimalFarmPlugin plugin) {
+    public FarmObjectManager(AnimalFarmPlugin plugin, FarmAreaAnalyzer areaAnalyzer) {
         this.plugin = plugin;
+        this.areaAnalyzer = areaAnalyzer;
     }
 
     public void registerLoaded() {
@@ -39,8 +42,7 @@ public final class FarmObjectManager implements Listener {
     public void registerChunk(Chunk chunk) {
         for (BlockState state : chunk.getTileEntities()) {
             if (!(state instanceof Barrel barrel)) continue;
-            FarmObjectType type = typeOf(barrel.getBlock());
-            if (type != null) {
+            if (typeOf(barrel.getBlock()) != null) {
                 objects.add(FarmObjectKey.of(barrel.getLocation()));
             }
         }
@@ -70,11 +72,7 @@ public final class FarmObjectManager implements Listener {
 
     public void clear() {
         objects.clear();
-    }
-
-    public void remove(Location location) {
-        objects.remove(FarmObjectKey.of(location));
-        plugin.invalidateArea(location);
+        areaAnalyzer.clear();
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -91,13 +89,20 @@ public final class FarmObjectManager implements Listener {
         boolean aquarium = isAquariumShelfItem(event.getItemInHand());
         if (!feeder && !aquarium) return;
 
-        String key = feeder ? "feeder_block" : "aquarium_shelf_block";
-        barrel.getPersistentDataContainer().set(keyOf(key), PersistentDataType.BYTE, (byte) 1);
+        barrel.getPersistentDataContainer().set(
+                keyOf(feeder ? "feeder_block" : "aquarium_shelf_block"),
+                PersistentDataType.BYTE,
+                (byte) 1
+        );
+        barrel.getPersistentDataContainer().set(keyOf("daily_feed_day"), PersistentDataType.LONG, -1L);
+        barrel.getPersistentDataContainer().set(keyOf("daily_water_day"), PersistentDataType.LONG, -1L);
+        barrel.getPersistentDataContainer().set(keyOf("production_day"), PersistentDataType.LONG, -1L);
         barrel.setCustomName(feeder ? "Кормушка" : "Аквариумная полка");
         barrel.update(true, false);
 
-        objects.add(FarmObjectKey.of(block.getLocation()));
-        plugin.invalidateArea(block.getLocation());
+        FarmObjectKey objectKey = FarmObjectKey.of(block.getLocation());
+        objects.add(objectKey);
+        areaAnalyzer.invalidate(objectKey);
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -106,9 +111,9 @@ public final class FarmObjectManager implements Listener {
         FarmObjectType type = typeOf(block);
         if (type == null) return;
 
-        FarmObjectKey key = FarmObjectKey.of(block.getLocation());
-        objects.remove(key);
-        plugin.invalidateArea(block.getLocation());
+        FarmObjectKey objectKey = FarmObjectKey.of(block.getLocation());
+        objects.remove(objectKey);
+        areaAnalyzer.invalidate(objectKey);
 
         if (!(block.getState() instanceof Barrel barrel)) return;
         event.setDropItems(false);
@@ -116,11 +121,12 @@ public final class FarmObjectManager implements Listener {
         ItemStack objectItem = type == FarmObjectType.LAND_FEEDER
                 ? plugin.createFeederItem()
                 : plugin.createAquariumShelfItem();
-        block.getWorld().dropItemNaturally(block.getLocation(), objectItem);
+        Location location = block.getLocation();
+        block.getWorld().dropItemNaturally(location, objectItem);
 
         for (ItemStack item : barrel.getInventory().getContents()) {
             if (item != null && !item.getType().isAir()) {
-                block.getWorld().dropItemNaturally(block.getLocation(), item.clone());
+                block.getWorld().dropItemNaturally(location, item.clone());
             }
         }
     }
@@ -138,7 +144,7 @@ public final class FarmObjectManager implements Listener {
         return meta != null && meta.getPersistentDataContainer().has(keyOf(key), PersistentDataType.BYTE);
     }
 
-    private org.bukkit.NamespacedKey keyOf(String key) {
-        return new org.bukkit.NamespacedKey(plugin, key);
+    private NamespacedKey keyOf(String key) {
+        return new NamespacedKey(plugin, key);
     }
 }
