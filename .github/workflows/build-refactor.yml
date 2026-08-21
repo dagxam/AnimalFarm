@@ -3,6 +3,8 @@ name: Build AnimalFarm Refactor
 on:
   push:
     branches: [ refactor/remove-duplication-optimize ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
