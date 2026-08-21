@@ -3,7 +3,6 @@ package ru.dagxam.animalfarm;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
-import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.event.EventHandler;
@@ -12,6 +11,7 @@ import org.bukkit.event.player.PlayerFishEvent;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -44,14 +44,15 @@ public final class FishingManager implements Listener {
         EntityType type = chooseCatch(water);
         if (type == null) return;
 
-        Entity caught = water.getWorld().spawnEntity(water, type);
-        event.setCaught(caught);
+        // В актуальном Paper API CAUGHT_FISH нельзя заменить через setCaught().
+        // Отменяем ванильный улов, удаляем предмет и создаём выбранного живого моба в воде.
+        event.setCancelled(true);
         originalCatch.remove();
-        event.setExpToDrop(ThreadLocalRandom.current().nextInt(1, 5));
+        water.getWorld().spawnEntity(water, type);
     }
 
     private EntityType chooseCatch(Location location) {
-        String biome = location.getBlock().getBiome().name();
+        String biome = location.getBlock().getBiome().getKey().getKey().toUpperCase(Locale.ROOT);
         List<EntityType> pool = new ArrayList<>();
 
         // Обычные рыбы добавляются с большим весом, чтобы они попадались чаще редких мобов.
