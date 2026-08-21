@@ -3,43 +3,37 @@ package ru.dagxam.animalfarm;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
-import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerFishEvent;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Replaces most successful rod catches with living aquatic mobs.
- * The mob is always spawned in nearby water so large aquatic mobs do not suffocate on land.
+ * Ловля живых водных существ обычной удочкой.
+ * Все основные параметры берутся из config.yml.
  */
 public final class FishingManager implements Listener {
 
-    private static final EntityType[] OCEAN_MOBS = {
-            EntityType.COD, EntityType.SALMON, EntityType.TROPICAL_FISH, EntityType.PUFFERFISH,
-            EntityType.SQUID, EntityType.GLOW_SQUID, EntityType.DOLPHIN, EntityType.TURTLE
-    };
+    private final AnimalFarmPlugin plugin;
 
-    private static final EntityType[] RIVER_MOBS = {
-            EntityType.COD, EntityType.SALMON, EntityType.SQUID, EntityType.AXOLOTL
-    };
-
-    private static final EntityType[] SWAMP_MOBS = {
-            EntityType.FROG, EntityType.AXOLOTL, EntityType.SALMON, EntityType.COD
-    };
-
-    private static final double LIVE_CATCH_CHANCE = 0.90D;
+    public FishingManager(AnimalFarmPlugin plugin) {
+        this.plugin = plugin;
+    }
 
     @EventHandler(ignoreCancelled = true)
     public void onFish(PlayerFishEvent event) {
+        if (!plugin.getConfig().getBoolean("fishing.enabled", true)) return;
         if (event.getState() != PlayerFishEvent.State.CAUGHT_FISH) return;
-        if (ThreadLocalRandom.current().nextDouble() > LIVE_CATCH_CHANCE) return;
+
+        double chance = Math.max(0, Math.min(100,
+                plugin.getConfig().getDouble("fishing.live-catch-chance", 90))) / 100.0D;
+        if (ThreadLocalRandom.current().nextDouble() > chance) return;
 
         Entity originalCatch = event.getCaught();
         if (originalCatch == null || originalCatch.getWorld() == null) return;
@@ -47,52 +41,65 @@ public final class FishingManager implements Listener {
         Location water = findWater(originalCatch.getLocation(), 4);
         if (water == null) return;
 
-        EntityType type = chooseCatch(event.getPlayer(), water);
+        EntityType type = chooseCatch(water);
+        if (type == null) return;
+
         Entity caught = water.getWorld().spawnEntity(water, type);
         event.setCaught(caught);
         originalCatch.remove();
         event.setExpToDrop(ThreadLocalRandom.current().nextInt(1, 5));
-
-        // Prevent the newly created mob from being instantly pulled to a dry block.
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                if (!caught.isValid()) return;
-                Location safeWater = findWater(caught.getLocation(), 6);
-                if (safeWater != null && caught.getLocation().getBlock().getType() != Material.WATER) {
-                    caught.teleport(safeWater);
-                }
-            }
-        }.runTaskLater(AnimalFarmPlugin.getProvidingPlugin(FishingManager.class), 1L);
     }
 
-    private EntityType chooseCatch(Player player, Location location) {
+    private EntityType chooseCatch(Location location) {
         String biome = location.getBlock().getBiome().name();
+        List<EntityType> pool = new ArrayList<>();
 
-        if (biome.contains("SWAMP")) {
-            return weighted(SWAMP_MOBS);
+        // Обычные рыбы добавляются с большим весом, чтобы они попадались чаще редких мобов.
+        if (plugin.getConfig().getBoolean("fishing.mobs.fish", true)) {
+            add(pool, EntityType.COD, 6);
+            add(pool, EntityType.SALMON, 5);
+            if (biome.contains("WARM_OCEAN")) {
+                add(pool, EntityType.TROPICAL_FISH, 8);
+                add(pool, EntityType.PUFFERFISH, 4);
+            } else if (biome.contains("COLD") || biome.contains("FROZEN")) {
+                add(pool, EntityType.COD, 4);
+                add(pool, EntityType.SALMON, 5);
+            } else {
+                add(pool, EntityType.TROPICAL_FISH, 2);
+                add(pool, EntityType.PUFFERFISH, 1);
+            }
         }
-        if (biome.contains("WARM_OCEAN")) {
-            return weighted(
-                    EntityType.TROPICAL_FISH, EntityType.TROPICAL_FISH, EntityType.TROPICAL_FISH,
-                    EntityType.PUFFERFISH, EntityType.TURTLE, EntityType.TURTLE,
-                    EntityType.DOLPHIN, EntityType.SQUID, EntityType.COD
-            );
+
+        boolean ocean = biome.contains("OCEAN") || biome.contains("BEACH");
+        boolean swamp = biome.contains("SWAMP");
+        boolean deepWater = ocean || location.getBlockY() < 55;
+
+        if (plugin.getConfig().getBoolean("fishing.mobs.squid", true) && !swamp) {
+            add(pool, EntityType.SQUID, ocean ? 2 : 1);
         }
-        if (biome.contains("COLD") || biome.contains("FROZEN")) {
-            return weighted(
-                    EntityType.SALMON, EntityType.SALMON, EntityType.COD, EntityType.COD,
-                    EntityType.SQUID, EntityType.GLOW_SQUID, EntityType.DOLPHIN
-            );
+        if (plugin.getConfig().getBoolean("fishing.mobs.glow-squid", true) && deepWater) {
+            add(pool, EntityType.GLOW_SQUID, 1);
         }
-        if (biome.contains("OCEAN") || biome.contains("BEACH")) {
-            return weighted(OCEAN_MOBS);
+        if (plugin.getConfig().getBoolean("fishing.mobs.axolotl", true)
+                && (swamp || !ocean || biome.contains("LUSH"))) {
+            add(pool, EntityType.AXOLOTL, 2);
         }
-        return weighted(RIVER_MOBS);
+        if (plugin.getConfig().getBoolean("fishing.mobs.turtle", true) && ocean) {
+            add(pool, EntityType.TURTLE, 1);
+        }
+        if (plugin.getConfig().getBoolean("fishing.mobs.dolphin", true) && ocean) {
+            add(pool, EntityType.DOLPHIN, 1);
+        }
+        if (plugin.getConfig().getBoolean("fishing.mobs.frog", true) && swamp) {
+            add(pool, EntityType.FROG, 2);
+        }
+
+        if (pool.isEmpty()) return null;
+        return pool.get(ThreadLocalRandom.current().nextInt(pool.size()));
     }
 
-    private EntityType weighted(EntityType... types) {
-        return types[ThreadLocalRandom.current().nextInt(types.length)];
+    private void add(List<EntityType> pool, EntityType type, int weight) {
+        for (int i = 0; i < weight; i++) pool.add(type);
     }
 
     private Location findWater(Location origin, int radius) {
@@ -110,7 +117,7 @@ public final class FishingManager implements Listener {
                 }
             }
         }
-        if (candidates.isEmpty()) return null;
-        return candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
+        return candidates.isEmpty() ? null
+                : candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
     }
 }
