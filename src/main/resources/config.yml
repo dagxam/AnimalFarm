@@ -1,22 +1,25 @@
 # ============================================================
 # AnimalFarm — основная конфигурация
+# Все игровые сутки считаются по 24000 игровых тиков.
 # ============================================================
 
 feeder:
   enabled: true
-  check-interval-seconds: 2
+  check-interval-seconds: 5
   eating-distance: 2.5
   path-speed: 1.1
   max-breeding-pairs-per-day: 10
-  water-feedings-per-bucket: 1
   water-max-stack: 16
 
-aquarium:
-  enabled: true
+# Обычный загон: забор полностью замкнут и есть ровно одна закрытая калитка.
+pen:
   max-radius: 16
   vertical-range: 5
 
-pen:
+# Аквариум: граница из любого стекла или стеклянных панелей, внутри вода.
+# Калитка для аквариума не нужна.
+aquarium:
+  enabled: true
   max-radius: 16
   vertical-range: 5
 
@@ -27,32 +30,31 @@ hud:
 mob-bucket:
   enabled: true
 
+# Кормление и дойка выполняются не чаще одного раза за игровые сутки.
 milking:
   enabled: true
   animals:
     cow: true
     sheep: true
     goat: true
-  milk-min: 2
-  milk-max: 3
 
 baby:
-  milk-feedings-required: 3
+  # Для коровы, овцы, козы и лошади число кормлений молоком выбирается случайно: 1-3.
+  milk-feedings-min: 1
+  milk-feedings-max: 3
 
-# Яйца и шерсть НЕ складываются в кормушку.
-# Яйца появляются на полу загона: 5-10 на взрослую курицу за сутки,
-# только если в загоне есть минимум две взрослые курицы.
+# Производство. Молоко НЕ создаётся автоматически: животное доится игроком.
+# Яйца НЕ кладутся в кормушку: они появляются на полу и не исчезают сами.
+# Шерсть собирается в кормушку и в HUD не показывается.
 production:
   chicken:
-    eggs-min: 0
-    eggs-max: 0
-  dairy:
-    milk-min: 0
-    milk-max: 0
+    eggs-min: 5
+    eggs-max: 10
   wool:
-    min: 0
-    max: 0
+    min: 2
+    max: 3
 
+# Точные выпадения после убийства.
 drops:
   cow:
     meat: { min: 1, max: 1 }
@@ -79,45 +81,39 @@ drops:
     rabbit-hide: { min: 1, max: 1 }
     bone: { min: 1, max: 1 }
 
-# Старая функция AnimalFarmPlugin выключена, чтобы не было двойного размножения.
-# DailyBreedingManager использует эти продукты независимо от флага enabled.
-# На одну пару за сутки расходуется две единицы корма и одно ведро воды.
+# Справочные настройки допустимого корма.
+# Фактические группы пищи проверяются кодом, чтобы поддерживать любые виды травы,
+# листья, кусты, цветы и любые семена.
 feeding:
   cow:
-    enabled: false
-    foods: [WHEAT]
+    foods: [HAY_BLOCK, WHEAT, APPLE, MELON_SLICE, PUMPKIN, MELON]
   sheep:
-    enabled: false
-    foods: [WHEAT]
+    foods: [HAY_BLOCK, WHEAT, ANY_GRASS_LEAVES_BUSHES_FLOWERS]
   goat:
-    enabled: false
-    foods: [WHEAT]
+    foods: [HAY_BLOCK, WHEAT, ANY_GRASS_LEAVES_BUSHES_FLOWERS]
   horse:
-    enabled: false
-    foods: [WHEAT]
+    foods: [HAY_BLOCK, WHEAT, ANY_GRASS_LEAVES_BUSHES_FLOWERS]
   rabbit:
-    enabled: false
-    foods: [CARROT, GOLDEN_CARROT, DANDELION]
+    foods: [CARROT, GOLDEN_CARROT]
   chicken:
-    enabled: false
-    foods: ANY_SEEDS
+    foods: [ANY_SEEDS, ANY_GRASS_LEAVES_BUSHES_FLOWERS]
   fish:
-    enabled: false
-    foods: ANY_SEEDS
+    foods: [ANY_SEEDS, SEAGRASS, KELP, SEA_PICKLE]
 
 messages:
   prefix: "&8[&6AnimalFarm&8] &r"
   no-permission: "&cУ вас нет прав для выполнения этой команды."
   reloaded: "&aКонфигурация успешно перезагружена."
-  info: "&fAnimalFarm &7— &eсистема животноводства и автоматических загонов."
+  info: "&fAnimalFarm &7— &eсистема животноводства, кормушек и аквариумов."
   milk-cow: "&aВы надоили корову."
-  milk-sheep: "&aВы надоили барана."
+  milk-sheep: "&aВы надоили овцу."
   milk-goat: "&aВы надоили козу."
-  milk-baby: "&aМалыш выпил молоко. &7Нужно три кормления для роста."
   milk-cooldown: "&eВы уже доили сегодня."
-  water-added: "&bВода добавлена в кормушку. &7Пустое ведро возвращено."
-  water-full: "&eВ кормушке нет свободного места для воды."
+  milk-baby: "&aМалыш выпил молоко. &7Следующее кормление — не раньше следующего игрового дня."
+  milk-baby-once: "&eЭтого малыша уже кормили молоком сегодня."
+  milk-baby-grown: "&aМалыш получил достаточно молока и вырос."
   pen-open: "&cЗагон не закрыт. &7Полностью замкните его забором и оставьте ровно одну закрытую калитку."
   pen-no-gate: "&cЗагон не готов. &7Нужна ровно одна закрытая калитка."
   pen-many-gates: "&cЗагон не готов. &7В загоне должна быть только одна калитка."
   pen-ready: "&aЗагон активен."
+  aquarium-water: "&cАквариум не готов. &7Внутри должна быть вода."
