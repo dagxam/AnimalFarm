@@ -2,12 +2,7 @@ package ru.dagxam.animalfarm;
 
 import org.bukkit.configuration.file.FileConfiguration;
 
-/**
- * Централизованное чтение и валидация настроек AnimalFarm.
- *
- * Основная задача класса — не размазывать getConfig() по всем менеджерам
- * и не допускать некорректных значений из config.yml.
- */
+/** Централизованное чтение и валидация настроек AnimalFarm. */
 public final class FarmSettings {
     private final FileConfiguration config;
 
@@ -24,7 +19,7 @@ public final class FarmSettings {
         return Math.max(1, config.getInt("feeder.max-breeding-pairs-per-day", 10));
     }
 
-    public int penRadius() {
+    public int penMaxRadius() {
         return Math.max(4, config.getInt("pen.max-radius", 16));
     }
 
@@ -32,12 +27,16 @@ public final class FarmSettings {
         return Math.max(3, config.getInt("pen.vertical-range", 5));
     }
 
-    public int aquariumRadius() {
+    public int aquariumMaxRadius() {
         return Math.max(4, config.getInt("aquarium.max-radius", 16));
     }
 
     public int aquariumVerticalRange() {
         return Math.max(3, config.getInt("aquarium.vertical-range", 5));
+    }
+
+    public boolean aquariumEnabled() {
+        return config.getBoolean("aquarium.enabled", true);
     }
 
     public int hudRange() {
