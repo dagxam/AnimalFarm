@@ -8,19 +8,15 @@ import org.bukkit.command.TabCompleter;
 
 import java.util.List;
 
+/** Административные команды AnimalFarm. Дублирующие менеджеры больше не запускаются. */
 public final class AnimalFarmCommand implements CommandExecutor, TabCompleter {
     private final AnimalFarmPlugin plugin;
 
     public AnimalFarmCommand(AnimalFarmPlugin plugin) {
         this.plugin = plugin;
+
+        // Это единственные дополнительные механики, которых нет в AnimalFarmPlugin.
         new MobBucketManager(plugin);
-        new FeederProductionManager(plugin);
-        new WaterBucketStackManager(plugin);
-        new RecipeManager(plugin);
-        new DailyBreedingManager(plugin);
-        new EggProductionManager(plugin);
-        new FishFarmManager(plugin);
-        new AnimalExtrasManager(plugin);
         new GoldenBoostManager(plugin);
         new ManualWoolManager(plugin);
     }
@@ -28,7 +24,8 @@ public final class AnimalFarmCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission("animalfarm.admin")) {
-            sender.sendMessage(color(plugin.getConfig().getString("messages.prefix", "") + plugin.getConfig().getString("messages.no-permission", "&cНет прав.")));
+            sender.sendMessage(color(plugin.getConfig().getString("messages.prefix", "")
+                    + plugin.getConfig().getString("messages.no-permission", "&cНет прав.")));
             return true;
         }
         if (args.length == 0) {
@@ -38,9 +35,11 @@ public final class AnimalFarmCommand implements CommandExecutor, TabCompleter {
         switch (args[0].toLowerCase()) {
             case "reload" -> {
                 plugin.reloadPluginConfig();
-                sender.sendMessage(color(plugin.getConfig().getString("messages.prefix", "") + plugin.getConfig().getString("messages.reloaded", "&aКонфигурация перезагружена.")));
+                sender.sendMessage(color(plugin.getConfig().getString("messages.prefix", "")
+                        + plugin.getConfig().getString("messages.reloaded", "&aКонфигурация перезагружена.")));
             }
-            case "info" -> sender.sendMessage(color(plugin.getConfig().getString("messages.prefix", "") + plugin.getConfig().getString("messages.info", "&fAnimalFarm")));
+            case "info" -> sender.sendMessage(color(plugin.getConfig().getString("messages.prefix", "")
+                    + plugin.getConfig().getString("messages.info", "&fAnimalFarm")));
             default -> sender.sendMessage(color("&8[&6AnimalFarm&8] &cНеизвестная команда. &fИспользование: &e/animalfarm <reload|info>"));
         }
         return true;
@@ -48,11 +47,15 @@ public final class AnimalFarmCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        if (args.length == 1) return List.of("reload", "info").stream().filter(value -> value.startsWith(args[0].toLowerCase())).toList();
+        if (args.length == 1) {
+            return List.of("reload", "info").stream()
+                    .filter(value -> value.startsWith(args[0].toLowerCase()))
+                    .toList();
+        }
         return List.of();
     }
 
     private String color(String text) {
-        return ChatColor.translateAlternateColorCodes('&', text);
+        return ChatColor.translateAlternateColorCodes('&', text == null ? "" : text);
     }
 }
