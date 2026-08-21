@@ -957,60 +957,79 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
     }
 
     private void startHudTask() {
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                if (!getConfig().getBoolean("hud.enabled", true)) {
-                    clearAllHud();
-                    return;
+    new BukkitRunnable() {
+
+        @Override
+        public void run() {
+
+            if (!getConfig().getBoolean("hud.enabled", true)) {
+                clearAllHud();
+                return;
+            }
+
+            int range = getConfig().getInt("hud.range", 6);
+
+            Set<UUID> online = new HashSet<>();
+
+            for (Player player : getServer().getOnlinePlayers()) {
+
+                UUID playerId = player.getUniqueId();
+                online.add(playerId);
+
+                Block target = player.getTargetBlockExact(range);
+
+                FeederKey current = null;
+                Barrel barrel = null;
+
+                if (target != null
+                        && isFeederBlock(target)
+                        && target.getState() instanceof Barrel foundBarrel) {
+
+                    current = FeederKey.of(target.getLocation());
+                    barrel = foundBarrel;
                 }
 
-                int range = Math.max(1, getConfig().getInt("hud.range", 6));
+                FeederKey previous = hudTargets.get(playerId);
 
-                for (Player player : getServer().getOnlinePlayers()) {
-                    UUID uuid = player.getUniqueId();
-                    Block target = player.getTargetBlockExact(range);
+                // Навёл курсор на кормушку
+                if (current != null) {
 
-                    if (target == null
-                            || !isAnyFarmObject(target)
-                            || !(target.getState() instanceof Barrel barrel)) {
+                    // Показываем HUD только при первом наведении
+                    // или при переходе на другую кормушку.
+                    if (!current.equals(previous)) {
 
-                        clearHudIfCursorReallyLeft(player);
-                        continue;
-                    }
+                        hudTargets.put(playerId, current);
 
-                    FeederKey targetKey = FeederKey.of(target.getLocation());
-
-                    // Пока игрок продолжает смотреть на ту же кормушку/полку,
-                    // HUD вообще НЕ отправляется повторно.
-                    // Поэтому обычная кормушка не моргает и показывает
-                    // последнюю информацию до следующего наведения.
-                    if (targetKey.equals(hudTargets.get(uuid))) {
-                        hudLastSeenTick.put(uuid, serverTick);
-                        continue;
-                    }
-
-                    boolean aquariumShelf = isAquariumShelfBlock(target);
-                    AreaStatus area = getArea(target.getLocation());
-
-                    if (aquariumShelf) {
                         player.sendActionBar(
-                                formatAquariumHud(area, barrel)
-                        );
-                    } else {
-                        player.sendActionBar(
-                                formatHud(area, barrel, false)
+                                formatHud(
+                                        getArea(target.getLocation()),
+                                        barrel
+                                )
                         );
                     }
 
-                    hudVisible.add(uuid);
-                    hudTargets.put(uuid, targetKey);
-                    hudLastSeenTick.put(uuid, serverTick);
-                    hudLastRefreshTick.put(uuid, serverTick);
+                    // Продолжает смотреть на ту же кормушку —
+                    // НИЧЕГО НЕ ОБНОВЛЯЕМ.
+                    continue;
+                }
+
+                // Убрал курсор с кормушки —
+                // один раз очищаем HUD.
+                if (previous != null) {
+
+                    hudTargets.remove(playerId);
+                    player.sendActionBar("");
                 }
             }
-        }.runTaskTimer(this, 1L, 5L);
-    }
+
+            // Удаляем вышедших игроков из кэша HUD.
+            hudTargets.keySet().removeIf(
+                    uuid -> !online.contains(uuid)
+            );
+        }
+
+    }.runTaskTimer(this, 5L, 5L);
+}
 
     private boolean isFish(EntityType type) {
         return switch (type) {
