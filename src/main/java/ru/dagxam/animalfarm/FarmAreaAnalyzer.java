@@ -2,9 +2,7 @@ package ru.dagxam.animalfarm;
 
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.Tag;
 import org.bukkit.block.Block;
-import org.bukkit.block.data.Openable;
 
 import java.util.ArrayDeque;
 import java.util.HashSet;
@@ -13,7 +11,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-/** Centralized, cached validation of farm areas. */
+/** Проверяет любое замкнутое пространство, пригодное для соответствующей кормушки. */
 public final class FarmAreaAnalyzer {
     private static final long CACHE_TTL_TICKS = 40L;
     private static final int[][] HORIZONTAL = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
@@ -27,108 +25,73 @@ public final class FarmAreaAnalyzer {
 
     public FarmAreaCache analyze(FarmObjectKey key, FarmObjectType type, long serverTick, org.bukkit.Server server) {
         FarmAreaCache cached = cache.get(key);
-        if (cached != null && cached.type() == type && !cached.isExpired(serverTick, CACHE_TTL_TICKS)) {
-            return cached;
-        }
+        if (cached != null && cached.type() == type && !cached.isExpired(serverTick, CACHE_TTL_TICKS)) return cached;
 
         Location location = key.location(server);
         FarmAreaCache fresh = switch (type) {
-            case LAND_FEEDER -> analyzePen(location, serverTick);
-            case AQUARIUM_SHELF -> analyzeAquarium(location, serverTick);
+            case LAND_FEEDER -> analyzeEnclosure(location, FarmObjectType.LAND_FEEDER, serverTick);
+            case AQUARIUM_SHELF -> analyzeEnclosure(location, FarmObjectType.AQUARIUM_SHELF, serverTick);
         };
         cache.put(key, fresh);
         return fresh;
     }
 
-    public void invalidate(FarmObjectKey key) {
-        cache.remove(key);
-    }
+    public void invalidate(FarmObjectKey key) { cache.remove(key); }
+    public void clear() { cache.clear(); }
 
-    public void clear() {
-        cache.clear();
-    }
+    private FarmAreaCache analyzeEnclosure(Location center, FarmObjectType type, long tick) {
+        if (type == FarmObjectType.AQUARIUM_SHELF && !settings.aquariumEnabled()) {
+            return new FarmAreaCache(false, type, center.clone(), tick);
+        }
 
-    private FarmAreaCache analyzePen(Location feeder, long tick) {
-        int radius = settings.penMaxRadius();
-        Block start = feeder.getBlock();
+        int radius = type == FarmObjectType.LAND_FEEDER ? settings.penMaxRadius() : settings.aquariumMaxRadius();
+        int vertical = type == FarmObjectType.LAND_FEEDER ? settings.penVerticalRange() : settings.aquariumVerticalRange();
+        Block start = center.getBlock();
         Set<Block> visited = new HashSet<>();
         ArrayDeque<Block> queue = new ArrayDeque<>();
         queue.add(start);
 
-        int gates = 0;
-        boolean escaped = false;
-        boolean openGate = false;
-
-        while (!queue.isEmpty() && visited.size() <= radius * radius * 8) {
-            Block block = queue.removeFirst();
-            if (!visited.add(block)) continue;
-            if (Math.abs(block.getX() - start.getX()) > radius || Math.abs(block.getZ() - start.getZ()) > radius) {
-                escaped = true;
-                break;
-            }
-
-            for (int[] direction : HORIZONTAL) {
-                Block next = block.getRelative(direction[0], 0, direction[1]);
-                if (Tag.FENCES.isTagged(next.getType())) {
-                    continue;
-                }
-                if (Tag.FENCE_GATES.isTagged(next.getType())) {
-                    gates++;
-                    if (next.getBlockData() instanceof Openable openable && openable.isOpen()) {
-                        openGate = true;
-                        escaped = true;
-                    }
-                    continue;
-                }
-                queue.addLast(next);
-            }
-        }
-
-        boolean valid = !escaped && gates == 1 && !openGate;
-        return new FarmAreaCache(valid, FarmObjectType.LAND_FEEDER, feeder.clone(), tick);
-    }
-
-    private FarmAreaCache analyzeAquarium(Location shelf, long tick) {
-        if (!settings.aquariumEnabled()) {
-            return new FarmAreaCache(false, FarmObjectType.AQUARIUM_SHELF, shelf.clone(), tick);
-        }
-
-        int radius = settings.aquariumMaxRadius();
-        Block start = shelf.getBlock();
-        Set<Block> visited = new HashSet<>();
-        ArrayDeque<Block> queue = new ArrayDeque<>();
-        queue.add(start);
-
-        boolean escaped = false;
+        boolean closed = true;
         boolean hasWater = false;
+        int inspected = 0;
+        int maxBlocks = Math.max(256, (radius * 2 + 1) * (radius * 2 + 1) * Math.max(2, vertical + 1));
 
-        while (!queue.isEmpty() && visited.size() <= radius * radius * 8) {
+        while (!queue.isEmpty() && inspected++ < maxBlocks) {
             Block block = queue.removeFirst();
             if (!visited.add(block)) continue;
-            if (Math.abs(block.getX() - start.getX()) > radius || Math.abs(block.getZ() - start.getZ()) > radius) {
-                escaped = true;
+
+            if (Math.abs(block.getX() - start.getX()) > radius
+                    || Math.abs(block.getZ() - start.getZ()) > radius
+                    || Math.abs(block.getY() - start.getY()) > vertical) {
+                closed = false;
                 break;
             }
-            if (block.getType() == Material.WATER) {
-                hasWater = true;
-            }
 
-            for (int[] direction : HORIZONTAL) {
-                Block next = block.getRelative(direction[0], 0, direction[1]);
-                if (isGlass(next)) continue;
+            if (block.getType() == Material.WATER) hasWater = true;
+
+            for (int[] dir : HORIZONTAL) {
+                Block next = block.getRelative(dir[0], 0, dir[1]);
+                if (isBoundary(next)) continue;
                 queue.addLast(next);
+            }
+            if (block.getY() < start.getY() + vertical) {
+                Block up = block.getRelative(0, 1, 0);
+                if (!isBoundary(up)) queue.addLast(up);
+            }
+            if (block.getY() > start.getY() - vertical) {
+                Block down = block.getRelative(0, -1, 0);
+                if (!isBoundary(down)) queue.addLast(down);
             }
         }
 
-        boolean valid = !escaped && hasWater;
-        return new FarmAreaCache(valid, FarmObjectType.AQUARIUM_SHELF, shelf.clone(), tick);
+        if (inspected >= maxBlocks) closed = false;
+        boolean valid = closed && !visited.isEmpty() && (type != FarmObjectType.AQUARIUM_SHELF || hasWater);
+        return new FarmAreaCache(valid, type, center.clone(), tick);
     }
 
-    private boolean isGlass(Block block) {
-        Material type = block.getType();
-        return type == Material.GLASS
-                || type == Material.TINTED_GLASS
-                || type.name().endsWith("_STAINED_GLASS")
-                || type.name().endsWith("_GLASS_PANE");
+    /** Любой непроходимый блок считается частью границы. */
+    private boolean isBoundary(Block block) {
+        Material material = block.getType();
+        return !material.isAir() && !block.isPassable();
     }
 }
