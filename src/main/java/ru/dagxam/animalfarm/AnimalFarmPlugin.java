@@ -36,7 +36,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
     public void onEnable() {
         saveDefaultConfig();
         initializeKeys();
-        reloadManagers();
+        createManagers();
 
         getServer().getPluginManager().registerEvents(farmObjectManager, this);
         getServer().getPluginManager().registerEvents(new DropManager(this), this);
@@ -68,24 +68,23 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         getLogger().info("AnimalFarm выключен.");
     }
 
+    /** Перезагружает только конфигурацию и зависимые объекты без повторной регистрации слушателей. */
     public void reloadPluginConfig() {
         reloadConfig();
+        settings = new FarmSettings(getConfig());
+        areaAnalyzer = new FarmAreaAnalyzer(settings);
+        farmObjectManager.setAreaAnalyzer(areaAnalyzer);
+        farmProcessor = new FarmProcessor(this, settings);
+        milkManager.setSettings(settings);
         restartFarmTask();
+        farmObjectManager.registerLoaded();
     }
 
-    private void reloadManagers() {
+    private void createManagers() {
         settings = new FarmSettings(getConfig());
-        if (areaAnalyzer == null) {
-            areaAnalyzer = new FarmAreaAnalyzer(settings);
-        } else {
-            areaAnalyzer.clear();
-        }
-        if (farmObjectManager == null) {
-            farmObjectManager = new FarmObjectManager(this, areaAnalyzer);
-        } else {
-            farmObjectManager.setAreaAnalyzer(areaAnalyzer);
-        }
-        if (taskScheduler == null) taskScheduler = new FarmTaskScheduler(this);
+        areaAnalyzer = new FarmAreaAnalyzer(settings);
+        farmObjectManager = new FarmObjectManager(this, areaAnalyzer);
+        taskScheduler = new FarmTaskScheduler(this);
         farmProcessor = new FarmProcessor(this, settings);
         milkManager = new MilkManager(this, settings);
     }
@@ -98,21 +97,10 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         return ChatColor.translateAlternateColorCodes('&', value == null ? "" : value);
     }
 
-    public FarmSettings settings() {
-        return settings;
-    }
-
-    public FarmAreaAnalyzer areaAnalyzer() {
-        return areaAnalyzer;
-    }
-
-    public FarmObjectManager farmObjectManager() {
-        return farmObjectManager;
-    }
-
-    public long serverTick() {
-        return serverTick;
-    }
+    public FarmSettings settings() { return settings; }
+    public FarmAreaAnalyzer areaAnalyzer() { return areaAnalyzer; }
+    public FarmObjectManager farmObjectManager() { return farmObjectManager; }
+    public long serverTick() { return serverTick; }
 
     public ItemStack createFeederItem() {
         ItemStack item = new ItemStack(Material.BARREL);
@@ -137,19 +125,15 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         meta.setDisplayName(color("&bАквариумная полка"));
         meta.setLore(List.of(
                 color("&7Полка для крепления к стенке аквариума."),
-                color("&7Крафтится из 4 обычных полок любой породы дерева."),
-                color("&7Достаточно установить одну полку."),
-                color("&7Семена и другая еда для рыб хранятся внутри."),
-                color("&7Калитка для аквариума не нужна.")
+                color("&7Полка для автоматического разведения рыб."),
+                color("&7Семена и другая еда для рыб хранятся внутри.")
         ));
         meta.getPersistentDataContainer().set(aquariumShelfItemKey, PersistentDataType.BYTE, (byte) 1);
         item.setItemMeta(meta);
         return item;
     }
 
-    public ItemStack createAquariumFeederItem() {
-        return createAquariumShelfItem();
-    }
+    public ItemStack createAquariumFeederItem() { return createAquariumShelfItem(); }
 
     public boolean isMobBucket(ItemStack item) {
         if (item == null || item.getType() != Material.BUCKET || !item.hasItemMeta()) return false;
@@ -193,7 +177,6 @@ public final class AnimalFarmPlugin extends JavaPlugin {
     }
 
     private void restartFarmTask() {
-        reloadManagers();
         taskScheduler.restartFarmTask(this::processFarmObjects, settings.feederCheckIntervalTicks());
     }
 
@@ -208,12 +191,10 @@ public final class AnimalFarmPlugin extends JavaPlugin {
                     farmObjectManager.remove(key);
                     continue;
                 }
-
                 FarmAreaCache area = areaAnalyzer.analyze(key, type, serverTick, getServer());
-                if (!area.valid()) continue;
-                farmProcessor.process(key, type, serverTick);
+                if (area.valid()) farmProcessor.process(key, type, serverTick);
             } catch (IllegalStateException ignored) {
-                // Мир временно выгружен.
+                // Мир временно не загружен.
             }
         }
     }
