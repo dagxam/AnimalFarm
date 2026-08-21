@@ -114,7 +114,7 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
         getServer().removeRecipe(key);
         ShapedRecipe recipe = new ShapedRecipe(key, createAquariumFeederItem());
         recipe.shape("SS", "SS");
-        recipe.setIngredient('S', Material.CHISELED_BOOKSHELF);
+        recipe.setIngredient('S', Material.BOOKSHELF);
         getServer().addRecipe(recipe);
     }
 
@@ -135,7 +135,7 @@ public final class AnimalFarmPlugin extends JavaPlugin implements Listener {
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.setDisplayName(color("&bКормушка для аквариума"));
-            meta.setLore(List.of(color("&7Крафтится из 4 резных книжных полок."), color("&7Достаточно установить одну кормушку внутри аквариума."), color("&7Калитка для аквариума не нужна.")));
+            meta.setLore(List.of(color("&7Крафтится из 4 обычных книжных полок."), color("&7Достаточно установить одну кормушку внутри аквариума."), color("&7Калитка для аквариума не нужна.")));
             meta.getPersistentDataContainer().set(aquariumFeederItemKey, PersistentDataType.BYTE, (byte) 1);
             item.setItemMeta(meta);
         }
