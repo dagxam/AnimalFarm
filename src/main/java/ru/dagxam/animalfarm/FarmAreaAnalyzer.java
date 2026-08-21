@@ -13,12 +13,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-/**
- * Centralized, cached validation of farm areas.
- * The analyzer deliberately performs no world-wide chunk scanning.
- */
+/** Centralized, cached validation of farm areas. */
 public final class FarmAreaAnalyzer {
-
     private static final long CACHE_TTL_TICKS = 40L;
     private static final int[][] HORIZONTAL = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
 
@@ -29,15 +25,16 @@ public final class FarmAreaAnalyzer {
         this.settings = Objects.requireNonNull(settings, "settings");
     }
 
-    public FarmAreaCache analyze(FarmObjectKey key, FarmObjectType type, long serverTick) {
+    public FarmAreaCache analyze(FarmObjectKey key, FarmObjectType type, long serverTick, org.bukkit.Server server) {
         FarmAreaCache cached = cache.get(key);
         if (cached != null && cached.type() == type && !cached.isExpired(serverTick, CACHE_TTL_TICKS)) {
             return cached;
         }
 
+        Location location = key.location(server);
         FarmAreaCache fresh = switch (type) {
-            case LAND_FEEDER -> analyzePen(key.location(), serverTick);
-            case AQUARIUM_SHELF -> analyzeAquarium(key.location(), serverTick);
+            case LAND_FEEDER -> analyzePen(location, serverTick);
+            case AQUARIUM_SHELF -> analyzeAquarium(location, serverTick);
         };
         cache.put(key, fresh);
         return fresh;
@@ -45,11 +42,6 @@ public final class FarmAreaAnalyzer {
 
     public void invalidate(FarmObjectKey key) {
         cache.remove(key);
-    }
-
-    public void invalidateNear(Location location, int radius) {
-        cache.keySet().removeIf(key -> key.location().getWorld().equals(location.getWorld())
-                && key.location().distanceSquared(location) <= (double) radius * radius);
     }
 
     public void clear() {
@@ -65,6 +57,8 @@ public final class FarmAreaAnalyzer {
 
         int gates = 0;
         boolean escaped = false;
+        boolean openGate = false;
+
         while (!queue.isEmpty() && visited.size() <= radius * radius * 8) {
             Block block = queue.removeFirst();
             if (!visited.add(block)) continue;
@@ -72,15 +66,17 @@ public final class FarmAreaAnalyzer {
                 escaped = true;
                 break;
             }
+
             for (int[] direction : HORIZONTAL) {
                 Block next = block.getRelative(direction[0], 0, direction[1]);
-                if (isFence(next)) continue;
-                if (Tag.FENCES.isTagged(next.getType()) || Tag.FENCE_GATES.isTagged(next.getType())) {
-                    if (Tag.FENCE_GATES.isTagged(next.getType())) {
-                        gates++;
-                        if (next.getBlockData() instanceof Openable openable && openable.isOpen()) {
-                            escaped = true;
-                        }
+                if (Tag.FENCES.isTagged(next.getType())) {
+                    continue;
+                }
+                if (Tag.FENCE_GATES.isTagged(next.getType())) {
+                    gates++;
+                    if (next.getBlockData() instanceof Openable openable && openable.isOpen()) {
+                        openGate = true;
+                        escaped = true;
                     }
                     continue;
                 }
@@ -88,7 +84,7 @@ public final class FarmAreaAnalyzer {
             }
         }
 
-        boolean valid = !escaped && gates == 1 && !visited.isEmpty();
+        boolean valid = !escaped && gates == 1 && !openGate;
         return new FarmAreaCache(valid, FarmObjectType.LAND_FEEDER, feeder.clone(), tick);
     }
 
@@ -96,11 +92,13 @@ public final class FarmAreaAnalyzer {
         if (!settings.aquariumEnabled()) {
             return new FarmAreaCache(false, FarmObjectType.AQUARIUM_SHELF, shelf.clone(), tick);
         }
+
         int radius = settings.aquariumMaxRadius();
         Block start = shelf.getBlock();
         Set<Block> visited = new HashSet<>();
         ArrayDeque<Block> queue = new ArrayDeque<>();
         queue.add(start);
+
         boolean escaped = false;
         boolean hasWater = false;
 
@@ -111,7 +109,10 @@ public final class FarmAreaAnalyzer {
                 escaped = true;
                 break;
             }
-            if (block.getType() == Material.WATER) hasWater = true;
+            if (block.getType() == Material.WATER) {
+                hasWater = true;
+            }
+
             for (int[] direction : HORIZONTAL) {
                 Block next = block.getRelative(direction[0], 0, direction[1]);
                 if (isGlass(next)) continue;
@@ -119,17 +120,15 @@ public final class FarmAreaAnalyzer {
             }
         }
 
-        boolean valid = !escaped && hasWater && !visited.isEmpty();
+        boolean valid = !escaped && hasWater;
         return new FarmAreaCache(valid, FarmObjectType.AQUARIUM_SHELF, shelf.clone(), tick);
-    }
-
-    private boolean isFence(Block block) {
-        return Tag.FENCES.isTagged(block.getType());
     }
 
     private boolean isGlass(Block block) {
         Material type = block.getType();
-        return type == Material.GLASS || type == Material.TINTED_GLASS || type.name().endsWith("_STAINED_GLASS")
+        return type == Material.GLASS
+                || type == Material.TINTED_GLASS
+                || type.name().endsWith("_STAINED_GLASS")
                 || type.name().endsWith("_GLASS_PANE");
     }
 }
