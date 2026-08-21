@@ -8,12 +8,17 @@ import org.bukkit.command.TabCompleter;
 
 import java.util.List;
 
-/** Административные команды AnimalFarm. Регистрация механик выполняется отдельно от команд. */
+/** Административные команды AnimalFarm. Дублирующие менеджеры больше не запускаются. */
 public final class AnimalFarmCommand implements CommandExecutor, TabCompleter {
     private final AnimalFarmPlugin plugin;
 
     public AnimalFarmCommand(AnimalFarmPlugin plugin) {
         this.plugin = plugin;
+
+        // Это единственные дополнительные механики, которых нет в AnimalFarmPlugin.
+        new MobBucketManager(plugin);
+        new GoldenBoostManager(plugin);
+        new ManualWoolManager(plugin);
     }
 
     @Override
@@ -23,12 +28,10 @@ public final class AnimalFarmCommand implements CommandExecutor, TabCompleter {
                     + plugin.getConfig().getString("messages.no-permission", "&cНет прав.")));
             return true;
         }
-
         if (args.length == 0) {
             sender.sendMessage(color("&8[&6AnimalFarm&8] &fИспользование: &e/animalfarm <reload|info>"));
             return true;
         }
-
         switch (args[0].toLowerCase()) {
             case "reload" -> {
                 plugin.reloadPluginConfig();
