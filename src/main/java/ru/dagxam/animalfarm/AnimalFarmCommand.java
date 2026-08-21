@@ -8,16 +8,13 @@ import org.bukkit.command.TabCompleter;
 
 import java.util.List;
 
-/** Административные команды AnimalFarm. Дублирующие менеджеры больше не запускаются. */
+/** Административные команды AnimalFarm. Дополнительные менеджеры запускаются здесь один раз. */
 public final class AnimalFarmCommand implements CommandExecutor, TabCompleter {
     private final AnimalFarmPlugin plugin;
 
     public AnimalFarmCommand(AnimalFarmPlugin plugin) {
         this.plugin = plugin;
-
-        // Это единственные дополнительные механики, которых нет в AnimalFarmPlugin.
         new MobBucketManager(plugin);
-        new GoldenBoostManager(plugin);
         new ManualWoolManager(plugin);
     }
 
@@ -55,7 +52,5 @@ public final class AnimalFarmCommand implements CommandExecutor, TabCompleter {
         return List.of();
     }
 
-    private String color(String text) {
-        return ChatColor.translateAlternateColorCodes('&', text == null ? "" : text);
-    }
+    private String color(String text) { return ChatColor.translateAlternateColorCodes('&', text == null ? "" : text); }
 }
