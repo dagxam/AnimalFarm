@@ -1,22 +1,21 @@
 package ru.dagxam.animalfarm;
 
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.entity.Animals;
+import org.bukkit.entity.Entity;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
-import org.bukkit.entity.Animals;
-import org.bukkit.entity.Entity;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
-import org.bukkit.NamespacedKey;
 
 import java.util.concurrent.ThreadLocalRandom;
 
 /** Ручное доение взрослых животных и кормление малышей молоком. */
 public final class MilkManager implements Listener {
-
     private final AnimalFarmPlugin plugin;
-    private final FarmSettings settings;
+    private FarmSettings settings;
     private final NamespacedKey milkDayKey;
     private final NamespacedKey milkFeedDayKey;
     private final NamespacedKey milkFeedCountKey;
@@ -31,21 +30,22 @@ public final class MilkManager implements Listener {
         this.milkFeedRequiredKey = new NamespacedKey(plugin, "milk_feed_required");
     }
 
+    public void setSettings(FarmSettings settings) {
+        this.settings = settings;
+    }
+
     @EventHandler(ignoreCancelled = true)
     public void onInteract(PlayerInteractEntityEvent event) {
         if (event.getHand() != org.bukkit.inventory.EquipmentSlot.HAND) return;
         Entity target = event.getRightClicked();
-        if (!(target instanceof Animals animal)) return;
+        if (!(target instanceof Animals animal) || !isMilkAnimal(animal)) return;
 
         ItemStack hand = event.getPlayer().getInventory().getItemInMainHand();
-        if (!isMilkAnimal(animal)) return;
-
         if (!animal.isAdult() && hand.getType() == Material.MILK_BUCKET) {
             event.setCancelled(true);
             feedBaby(event, animal);
             return;
         }
-
         if (!animal.isAdult() || hand.getType() != Material.BUCKET) return;
 
         event.setCancelled(true);
@@ -55,10 +55,8 @@ public final class MilkManager implements Listener {
             event.getPlayer().sendMessage(plugin.message("prefix") + plugin.message("milk-cooldown"));
             return;
         }
-
         animal.getPersistentDataContainer().set(milkDayKey, PersistentDataType.LONG, day);
-        ItemStack result = new ItemStack(Material.MILK_BUCKET);
-        replaceOne(event.getPlayer(), result);
+        replaceOne(event.getPlayer(), new ItemStack(Material.MILK_BUCKET));
         event.getPlayer().sendMessage(plugin.message("prefix") + milkMessage(animal));
     }
 
@@ -85,6 +83,7 @@ public final class MilkManager implements Listener {
             baby.setAdult();
             baby.getPersistentDataContainer().remove(milkFeedCountKey);
             baby.getPersistentDataContainer().remove(milkFeedRequiredKey);
+            baby.getPersistentDataContainer().remove(milkFeedDayKey);
             event.getPlayer().sendMessage(plugin.message("prefix") + plugin.message("milk-baby-grown"));
         } else {
             event.getPlayer().sendMessage(plugin.message("prefix") + plugin.message("milk-baby"));
