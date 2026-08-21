@@ -30,6 +30,20 @@ hud:
 mob-bucket:
   enabled: true
 
+# Живая добыча на обычную удочку.
+# Большинство успешных поклёвок превращается в живое водное существо.
+fishing:
+  enabled: true
+  live-catch-chance: 90
+  mobs:
+    fish: true
+    axolotl: true
+    squid: true
+    glow-squid: true
+    turtle: true
+    dolphin: true
+    frog: true
+
 # Кормление и дойка выполняются не чаще одного раза за игровые сутки.
 milking:
   enabled: true
