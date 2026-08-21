@@ -3,8 +3,6 @@ package ru.dagxam.animalfarm;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
-import org.bukkit.World;
-import org.bukkit.block.Barrel;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.RecipeChoice;
 import org.bukkit.inventory.ShapedRecipe;
@@ -17,13 +15,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
-/**
- * Основное ядро AnimalFarm.
- * Игровые механики распределены по специализированным менеджерам.
- */
+/** Основное ядро AnimalFarm. Игровые механики распределены по специализированным менеджерам. */
 public final class AnimalFarmPlugin extends JavaPlugin {
-
-    private static final int BUCKET_STACK_SIZE = 16;
 
     private NamespacedKey feederItemKey;
     private NamespacedKey aquariumShelfItemKey;
@@ -33,9 +26,9 @@ public final class AnimalFarmPlugin extends JavaPlugin {
     private FarmAreaAnalyzer areaAnalyzer;
     private FarmObjectManager farmObjectManager;
     private FarmTaskScheduler taskScheduler;
+    private FarmProcessor farmProcessor;
 
     private BukkitTask tickTask;
-    private BukkitTask hudTask;
     private long serverTick;
 
     @Override
@@ -47,6 +40,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         areaAnalyzer = new FarmAreaAnalyzer(settings);
         farmObjectManager = new FarmObjectManager(this, areaAnalyzer);
         taskScheduler = new FarmTaskScheduler(this);
+        farmProcessor = new FarmProcessor(this, settings);
 
         getServer().getPluginManager().registerEvents(farmObjectManager, this);
         getServer().getPluginManager().registerEvents(new DropManager(this), this);
@@ -61,15 +55,16 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         farmObjectManager.registerLoaded();
         startTickTask();
         startFarmTask();
-        startHudTask();
 
-        getLogger().info("AnimalFarm включён. Дублирующие фермерские менеджеры не запускаются.");
+        getLogger().info("AnimalFarm включён. Единый процессор фермы активен.");
     }
 
     @Override
     public void onDisable() {
-        if (tickTask != null) tickTask.cancel();
-        if (hudTask != null) hudTask.cancel();
+        if (tickTask != null) {
+            tickTask.cancel();
+            tickTask = null;
+        }
         if (taskScheduler != null) taskScheduler.stop();
         if (farmObjectManager != null) farmObjectManager.clear();
         if (areaAnalyzer != null) areaAnalyzer.clear();
@@ -80,9 +75,8 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         reloadConfig();
         settings = new FarmSettings(getConfig());
         areaAnalyzer = new FarmAreaAnalyzer(settings);
-        if (farmObjectManager != null) {
-            farmObjectManager.setAreaAnalyzer(areaAnalyzer);
-        }
+        farmProcessor = new FarmProcessor(this, settings);
+        if (farmObjectManager != null) farmObjectManager.setAreaAnalyzer(areaAnalyzer);
         restartFarmTask();
     }
 
@@ -114,7 +108,6 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         ItemStack item = new ItemStack(Material.BARREL);
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return item;
-
         meta.setDisplayName(color("&6Кормушка"));
         meta.setLore(List.of(
                 color("&7Автоматическая кормушка для наземных животных."),
@@ -131,7 +124,6 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         ItemStack item = new ItemStack(Material.BARREL);
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return item;
-
         meta.setDisplayName(color("&bАквариумная полка"));
         meta.setLore(List.of(
                 color("&7Полка для крепления к стенке аквариума."),
@@ -153,13 +145,6 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         if (item == null || item.getType() != Material.BUCKET || !item.hasItemMeta()) return false;
         ItemMeta meta = item.getItemMeta();
         return meta != null && meta.getPersistentDataContainer().has(mobBucketKey, PersistentDataType.BYTE);
-    }
-
-    public void invalidateArea(org.bukkit.Location location) {
-        if (areaAnalyzer != null && farmObjectManager != null) {
-            FarmObjectKey key = FarmObjectKey.of(location);
-            areaAnalyzer.invalidate(key);
-        }
     }
 
     private void initializeKeys() {
@@ -190,9 +175,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
     }
 
     private void startTickTask() {
-        tickTask = getServer().getScheduler().runTaskTimer(this, () -> {
-            serverTick++;
-        }, 1L, 1L);
+        tickTask = getServer().getScheduler().runTaskTimer(this, () -> serverTick++, 1L, 1L);
     }
 
     private void startFarmTask() {
@@ -209,10 +192,9 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         if (!getConfig().getBoolean("feeder.enabled", true)) return;
 
         for (FarmObjectKey key : farmObjectManager.objects()) {
-            FarmObjectType type;
             try {
                 org.bukkit.Location location = key.location(getServer());
-                type = farmObjectManager.typeOf(location.getBlock());
+                FarmObjectType type = farmObjectManager.typeOf(location.getBlock());
                 if (type == null) {
                     farmObjectManager.remove(key);
                     continue;
@@ -220,59 +202,10 @@ public final class AnimalFarmPlugin extends JavaPlugin {
 
                 FarmAreaCache area = areaAnalyzer.analyze(key, type, serverTick, getServer());
                 if (!area.valid()) continue;
-
-                processObject(location, type);
+                farmProcessor.process(key, type, serverTick);
             } catch (IllegalStateException ignored) {
-                // Мир выгружен; объект останется в списке и будет проверен после загрузки.
+                // Мир временно выгружен.
             }
         }
-    }
-
-    private void processObject(org.bukkit.Location location, FarmObjectType type) {
-        if (!(location.getBlock().getState() instanceof Barrel barrel)) return;
-        if (type == FarmObjectType.LAND_FEEDER) {
-            processLandFeeder(barrel, location);
-        } else {
-            processAquariumShelf(barrel, location);
-        }
-    }
-
-    private void processLandFeeder(Barrel barrel, org.bukkit.Location location) {
-        long day = location.getWorld().getFullTime() / 24000L;
-        processDailyLandFeedAndWater(barrel, day);
-        processDailyLandProduction(barrel, day);
-        barrel.update(true, false);
-    }
-
-    private void processAquariumShelf(Barrel barrel, org.bukkit.Location location) {
-        long day = location.getWorld().getFullTime() / 24000L;
-        processDailyFishFeed(barrel, day);
-        barrel.update(true, false);
-    }
-
-    private void processDailyLandFeedAndWater(Barrel barrel, long day) {
-        // Основная обработка кормления/размножения постепенно переносится в отдельные процессоры.
-        // Здесь пока оставлен только единый тикер без дополнительных world-wide scans.
-        barrel.getPersistentDataContainer().set(
-                new NamespacedKey(this, "last_farm_process_day"),
-                PersistentDataType.LONG,
-                day
-        );
-    }
-
-    private void processDailyLandProduction(Barrel barrel, long day) {
-        // Не создаём вторую систему производства: старые production-manager'ы удалены.
-        // Производственные механики будут жить в едином FarmProcessor.
-    }
-
-    private void processDailyFishFeed(Barrel barrel, long day) {
-        // Единый тикер для аквариума; отдельного world-wide FishFarmManager больше нет.
-    }
-
-    private void startHudTask() {
-        hudTask = getServer().getScheduler().runTaskTimer(this, () -> {
-            if (!getConfig().getBoolean("hud.enabled", true)) return;
-            // HUD будет обслуживаться специализированным менеджером при дальнейшем разбиении.
-        }, 5L, 5L);
     }
 }
