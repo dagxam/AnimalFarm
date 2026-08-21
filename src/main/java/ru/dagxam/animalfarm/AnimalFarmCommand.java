@@ -21,6 +21,8 @@ public final class AnimalFarmCommand implements CommandExecutor, TabCompleter {
         new EggProductionManager(plugin);
         new FishFarmManager(plugin);
         new AnimalExtrasManager(plugin);
+        new GoldenBoostManager(plugin);
+        new ManualWoolManager(plugin);
     }
 
     @Override
