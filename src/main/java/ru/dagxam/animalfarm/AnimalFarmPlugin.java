@@ -1,5 +1,6 @@
 package ru.dagxam.animalfarm;
 
+import org.bukkit.entity.EntityType;
 import org.bukkit.ChatColor;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
