@@ -41,7 +41,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(farmObjectManager, this);
         getServer().getPluginManager().registerEvents(new DropManager(this), this);
         getServer().getPluginManager().registerEvents(milkManager, this);
-        getServer().getPluginManager().registerEvents(new FishingManager(), this);
+        getServer().getPluginManager().registerEvents(new FishingManager(this), this);
 
         AnimalFarmCommand command = new AnimalFarmCommand(this);
         Objects.requireNonNull(getCommand("animalfarm")).setExecutor(command);
@@ -178,25 +178,11 @@ public final class AnimalFarmPlugin extends JavaPlugin {
     }
 
     private void restartFarmTask() {
-        taskScheduler.restartFarmTask(this::processFarmObjects, settings.feederCheckIntervalTicks());
+        taskScheduler.stop();
+        startFarmTask();
     }
 
     private void processFarmObjects() {
-        if (!getConfig().getBoolean("feeder.enabled", true)) return;
-
-        for (FarmObjectKey key : farmObjectManager.objects()) {
-            try {
-                org.bukkit.Location location = key.location(getServer());
-                FarmObjectType type = farmObjectManager.typeOf(location.getBlock());
-                if (type == null) {
-                    farmObjectManager.remove(key);
-                    continue;
-                }
-                FarmAreaCache area = areaAnalyzer.analyze(key, type, serverTick, getServer());
-                if (area.valid()) farmProcessor.process(key, type, serverTick);
-            } catch (IllegalStateException ignored) {
-                // Мир временно не загружен.
-            }
-        }
+        farmProcessor.process(farmObjectManager.objects());
     }
 }
