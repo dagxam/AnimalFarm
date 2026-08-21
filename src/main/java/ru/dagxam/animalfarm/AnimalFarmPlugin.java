@@ -27,6 +27,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
     private FarmObjectManager farmObjectManager;
     private FarmTaskScheduler taskScheduler;
     private FarmProcessor farmProcessor;
+    private MilkManager milkManager;
 
     private BukkitTask tickTask;
     private long serverTick;
@@ -35,15 +36,11 @@ public final class AnimalFarmPlugin extends JavaPlugin {
     public void onEnable() {
         saveDefaultConfig();
         initializeKeys();
-
-        settings = new FarmSettings(getConfig());
-        areaAnalyzer = new FarmAreaAnalyzer(settings);
-        farmObjectManager = new FarmObjectManager(this, areaAnalyzer);
-        taskScheduler = new FarmTaskScheduler(this);
-        farmProcessor = new FarmProcessor(this, settings);
+        reloadManagers();
 
         getServer().getPluginManager().registerEvents(farmObjectManager, this);
         getServer().getPluginManager().registerEvents(new DropManager(this), this);
+        getServer().getPluginManager().registerEvents(milkManager, this);
 
         AnimalFarmCommand command = new AnimalFarmCommand(this);
         Objects.requireNonNull(getCommand("animalfarm")).setExecutor(command);
@@ -73,11 +70,24 @@ public final class AnimalFarmPlugin extends JavaPlugin {
 
     public void reloadPluginConfig() {
         reloadConfig();
-        settings = new FarmSettings(getConfig());
-        areaAnalyzer = new FarmAreaAnalyzer(settings);
-        farmProcessor = new FarmProcessor(this, settings);
-        if (farmObjectManager != null) farmObjectManager.setAreaAnalyzer(areaAnalyzer);
         restartFarmTask();
+    }
+
+    private void reloadManagers() {
+        settings = new FarmSettings(getConfig());
+        if (areaAnalyzer == null) {
+            areaAnalyzer = new FarmAreaAnalyzer(settings);
+        } else {
+            areaAnalyzer.clear();
+        }
+        if (farmObjectManager == null) {
+            farmObjectManager = new FarmObjectManager(this, areaAnalyzer);
+        } else {
+            farmObjectManager.setAreaAnalyzer(areaAnalyzer);
+        }
+        if (taskScheduler == null) taskScheduler = new FarmTaskScheduler(this);
+        farmProcessor = new FarmProcessor(this, settings);
+        milkManager = new MilkManager(this, settings);
     }
 
     public String message(String path) {
@@ -183,9 +193,8 @@ public final class AnimalFarmPlugin extends JavaPlugin {
     }
 
     private void restartFarmTask() {
-        if (taskScheduler != null) {
-            taskScheduler.restartFarmTask(this::processFarmObjects, settings.feederCheckIntervalTicks());
-        }
+        reloadManagers();
+        taskScheduler.restartFarmTask(this::processFarmObjects, settings.feederCheckIntervalTicks());
     }
 
     private void processFarmObjects() {
