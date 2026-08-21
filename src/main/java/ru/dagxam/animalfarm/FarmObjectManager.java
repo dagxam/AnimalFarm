@@ -23,11 +23,15 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class FarmObjectManager implements Listener {
 
     private final AnimalFarmPlugin plugin;
-    private final FarmAreaAnalyzer areaAnalyzer;
+    private FarmAreaAnalyzer areaAnalyzer;
     private final Set<FarmObjectKey> objects = ConcurrentHashMap.newKeySet();
 
     public FarmObjectManager(AnimalFarmPlugin plugin, FarmAreaAnalyzer areaAnalyzer) {
         this.plugin = plugin;
+        this.areaAnalyzer = areaAnalyzer;
+    }
+
+    public void setAreaAnalyzer(FarmAreaAnalyzer areaAnalyzer) {
         this.areaAnalyzer = areaAnalyzer;
     }
 
@@ -72,7 +76,12 @@ public final class FarmObjectManager implements Listener {
 
     public void clear() {
         objects.clear();
-        areaAnalyzer.clear();
+        if (areaAnalyzer != null) areaAnalyzer.clear();
+    }
+
+    public void remove(FarmObjectKey key) {
+        objects.remove(key);
+        if (areaAnalyzer != null) areaAnalyzer.invalidate(key);
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -102,7 +111,7 @@ public final class FarmObjectManager implements Listener {
 
         FarmObjectKey objectKey = FarmObjectKey.of(block.getLocation());
         objects.add(objectKey);
-        areaAnalyzer.invalidate(objectKey);
+        if (areaAnalyzer != null) areaAnalyzer.invalidate(objectKey);
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -113,7 +122,7 @@ public final class FarmObjectManager implements Listener {
 
         FarmObjectKey objectKey = FarmObjectKey.of(block.getLocation());
         objects.remove(objectKey);
-        areaAnalyzer.invalidate(objectKey);
+        if (areaAnalyzer != null) areaAnalyzer.invalidate(objectKey);
 
         if (!(block.getState() instanceof Barrel barrel)) return;
         event.setDropItems(false);
