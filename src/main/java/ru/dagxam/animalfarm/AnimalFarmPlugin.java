@@ -3,7 +3,6 @@ package ru.dagxam.animalfarm;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.command.PluginCommand;
-import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.RecipeChoice;
 import org.bukkit.inventory.ShapedRecipe;
@@ -11,7 +10,6 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
-import java.util.Arrays;
 import java.util.List;
 
 public final class AnimalFarmPlugin extends JavaPlugin {
@@ -26,6 +24,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
     private FarmTaskScheduler taskScheduler;
     private MilkManager milkManager;
     private FishingManager fishingManager;
+    private FarmHudManager hudManager;
 
     @Override
     public void onEnable() {
@@ -55,6 +54,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         taskScheduler = new FarmTaskScheduler(this);
         milkManager = new MilkManager(this, settings);
         fishingManager = new FishingManager(this);
+        hudManager = new FarmHudManager(this);
     }
 
     private void registerListeners() {
@@ -62,6 +62,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new DropManager(this), this);
         getServer().getPluginManager().registerEvents(milkManager, this);
         getServer().getPluginManager().registerEvents(fishingManager, this);
+        getServer().getPluginManager().registerEvents(hudManager, this);
     }
 
     private void registerCommand() {
@@ -75,26 +76,24 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         command.setTabCompleter(executor);
     }
 
-    /** Перезагружает настройки без повторной регистрации слушателей. */
     public void reloadPluginConfig() {
         reloadConfig();
-
         settings = new FarmSettings(getConfig());
-        FarmAreaAnalyzer newAnalyzer = new FarmAreaAnalyzer(settings);
-        areaAnalyzer = newAnalyzer;
-        farmObjectManager.setAreaAnalyzer(newAnalyzer);
+        areaAnalyzer = new FarmAreaAnalyzer(settings);
+        farmObjectManager.setAreaAnalyzer(areaAnalyzer);
         farmObjectManager.clear();
         farmObjectManager.registerLoaded();
-
         farmProcessor = new FarmProcessor(this, settings);
         milkManager.setSettings(settings);
         restartFarmTask();
     }
 
-    /** Возвращает сообщение из config.yml с цветами Minecraft. */
+    public FarmSettings settings() { return settings; }
+    public FarmObjectManager farmObjectManager() { return farmObjectManager; }
+
     public String message(String key) {
         String value = getConfig().getString("messages." + key, "");
-        return value.replace('&', '§');
+        return org.bukkit.ChatColor.translateAlternateColorCodes('&', value);
     }
 
     public ItemStack createFeederItem() {
@@ -102,11 +101,8 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.setDisplayName("§6Кормушка");
-            meta.getPersistentDataContainer().set(
-                    new NamespacedKey(this, "feeder_item"),
-                    org.bukkit.persistence.PersistentDataType.BYTE,
-                    (byte) 1
-            );
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, "feeder_item"),
+                    org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
             item.setItemMeta(meta);
         }
         return item;
@@ -116,12 +112,9 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         ItemStack item = new ItemStack(Material.BARREL);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName("§bАквариумная полка");
-            meta.getPersistentDataContainer().set(
-                    new NamespacedKey(this, "aquarium_shelf_item"),
-                    org.bukkit.persistence.PersistentDataType.BYTE,
-                    (byte) 1
-            );
+            meta.setDisplayName("§bАквариумная кормушка");
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, "aquarium_shelf_item"),
+                    org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
             item.setItemMeta(meta);
         }
         return item;
@@ -137,15 +130,15 @@ public final class AnimalFarmPlugin extends JavaPlugin {
 
         NamespacedKey shelfKey = new NamespacedKey(this, "aquarium_shelf");
         getServer().removeRecipe(shelfKey);
-        List<Material> shelves = Arrays.stream(Material.values())
-                .filter(material -> material.name().endsWith("_SHELF"))
-                .toList();
-        if (!shelves.isEmpty()) {
-            ShapedRecipe shelfRecipe = new ShapedRecipe(shelfKey, createAquariumShelfItem());
-            shelfRecipe.shape("SS", "SS");
-            shelfRecipe.setIngredient('S', new RecipeChoice.MaterialChoice(shelves));
-            getServer().addRecipe(shelfRecipe);
-        }
+        ShapedRecipe fishFeeder = new ShapedRecipe(shelfKey, createAquariumShelfItem());
+        fishFeeder.shape("FF", "FF");
+        fishFeeder.setIngredient('F', new RecipeChoice.MaterialChoice(
+                Material.COD_SPAWN_EGG,
+                Material.SALMON_SPAWN_EGG,
+                Material.TROPICAL_FISH_SPAWN_EGG,
+                Material.PUFFERFISH_SPAWN_EGG
+        ));
+        getServer().addRecipe(fishFeeder);
     }
 
     private void startTickTask() {
@@ -166,9 +159,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
             var location = key.location(getServer());
             if (location.getWorld() == null) continue;
             FarmObjectType type = farmObjectManager.typeOf(location.getBlock());
-            if (type != null) {
-                farmProcessor.process(key, type, serverTick);
-            }
+            if (type != null) farmProcessor.process(key, type, serverTick);
         }
     }
 }
