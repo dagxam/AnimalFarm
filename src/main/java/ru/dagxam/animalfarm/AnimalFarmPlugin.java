@@ -3,6 +3,7 @@ package ru.dagxam.animalfarm;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.command.PluginCommand;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.RecipeChoice;
 import org.bukkit.inventory.ShapedRecipe;
@@ -46,8 +47,8 @@ public final class AnimalFarmPlugin extends JavaPlugin {
     }
 
     private void loadManagers() {
-        settings = new FarmSettings(this);
-        areaAnalyzer = new FarmAreaAnalyzer(this, settings);
+        settings = new FarmSettings(getConfig());
+        areaAnalyzer = new FarmAreaAnalyzer(settings);
         farmObjectManager = new FarmObjectManager(this, areaAnalyzer);
         farmObjectManager.registerLoaded();
         farmProcessor = new FarmProcessor(this, settings);
@@ -74,17 +75,26 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         command.setTabCompleter(executor);
     }
 
+    /** Перезагружает настройки без повторной регистрации слушателей. */
     public void reloadPluginConfig() {
         reloadConfig();
-        settings = new FarmSettings(this);
-        areaAnalyzer = new FarmAreaAnalyzer(this, settings);
-        farmObjectManager.setAreaAnalyzer(areaAnalyzer);
+
+        settings = new FarmSettings(getConfig());
+        FarmAreaAnalyzer newAnalyzer = new FarmAreaAnalyzer(settings);
+        areaAnalyzer = newAnalyzer;
+        farmObjectManager.setAreaAnalyzer(newAnalyzer);
         farmObjectManager.clear();
         farmObjectManager.registerLoaded();
+
         farmProcessor = new FarmProcessor(this, settings);
-        milkManager = new MilkManager(this, settings);
-        fishingManager = new FishingManager(this);
+        milkManager.setSettings(settings);
         restartFarmTask();
+    }
+
+    /** Возвращает сообщение из config.yml с цветами Minecraft. */
+    public String message(String key) {
+        String value = getConfig().getString("messages." + key, "");
+        return value.replace('&', '§');
     }
 
     public ItemStack createFeederItem() {
