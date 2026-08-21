@@ -1,5 +1,6 @@
 package ru.dagxam.animalfarm;
 
+import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Entity;
@@ -23,33 +24,21 @@ public final class DropManager implements Listener {
     @EventHandler(ignoreCancelled = true)
     public void onDeath(EntityDeathEvent event) {
         String animal = animalKey(event.getEntity());
-        if (animal == null) {
-            return;
-        }
+        if (animal == null) return;
 
-        ConfigurationSection section = plugin.getConfig()
-                .getConfigurationSection("drops." + animal);
-        if (section == null) {
-            return;
-        }
+        ConfigurationSection section = plugin.getConfig().getConfigurationSection("drops." + animal);
+        if (section == null) return;
 
         event.getDrops().clear();
         addConfiguredDrop(event, section, "meat", meat(animal));
-
         if (animal.equals("rabbit")) {
             addConfiguredDrop(event, section, "rabbit-hide", new ItemStack(Material.RABBIT_HIDE));
         } else if (!animal.equals("chicken")) {
             addConfiguredDrop(event, section, "leather", new ItemStack(Material.LEATHER));
         }
-
         addConfiguredDrop(event, section, "bone", new ItemStack(Material.BONE));
-
-        if (animal.equals("sheep")) {
-            addConfiguredDrop(event, section, "wool", new ItemStack(Material.WHITE_WOOL));
-        }
-        if (animal.equals("chicken")) {
-            addConfiguredDrop(event, section, "feather", new ItemStack(Material.FEATHER));
-        }
+        if (animal.equals("sheep")) addConfiguredDrop(event, section, "wool", new ItemStack(Material.WHITE_WOOL));
+        if (animal.equals("chicken")) addConfiguredDrop(event, section, "feather", new ItemStack(Material.FEATHER));
     }
 
     private String animalKey(Entity entity) {
@@ -80,20 +69,17 @@ public final class DropManager implements Listener {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName(plugin.color(name));
+            meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', name));
             item.setItemMeta(meta);
         }
         return item;
     }
 
-    private void addConfiguredDrop(EntityDeathEvent event, ConfigurationSection section,
-                                   String key, ItemStack prototype) {
+    private void addConfiguredDrop(EntityDeathEvent event, ConfigurationSection section, String key, ItemStack prototype) {
         int min = section.getInt(key + ".min", 0);
         int max = section.getInt(key + ".max", min);
         int amount = random(Math.max(0, min), Math.max(Math.max(0, min), max));
-        if (amount <= 0) {
-            return;
-        }
+        if (amount <= 0) return;
 
         ItemStack drop = prototype.clone();
         drop.setAmount(amount);
