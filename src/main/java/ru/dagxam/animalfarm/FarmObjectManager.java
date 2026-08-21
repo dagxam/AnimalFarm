@@ -37,18 +37,14 @@ public final class FarmObjectManager implements Listener {
 
     public void registerLoaded() {
         for (var world : plugin.getServer().getWorlds()) {
-            for (Chunk chunk : world.getLoadedChunks()) {
-                registerChunk(chunk);
-            }
+            for (Chunk chunk : world.getLoadedChunks()) registerChunk(chunk);
         }
     }
 
     public void registerChunk(Chunk chunk) {
         for (BlockState state : chunk.getTileEntities()) {
             if (!(state instanceof Barrel barrel)) continue;
-            if (typeOf(barrel.getBlock()) != null) {
-                objects.add(FarmObjectKey.of(barrel.getLocation()));
-            }
+            if (typeOf(barrel.getBlock()) != null) objects.add(FarmObjectKey.of(barrel.getLocation()));
         }
     }
 
@@ -109,9 +105,9 @@ public final class FarmObjectManager implements Listener {
         barrel.setCustomName(feeder ? "Кормушка" : "Аквариумная полка");
         barrel.update(true, false);
 
-        FarmObjectKey objectKey = FarmObjectKey.of(block.getLocation());
-        objects.add(objectKey);
-        if (areaAnalyzer != null) areaAnalyzer.invalidate(objectKey);
+        FarmObjectKey key = FarmObjectKey.of(block.getLocation());
+        objects.add(key);
+        if (areaAnalyzer != null) areaAnalyzer.invalidate(key);
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -120,9 +116,9 @@ public final class FarmObjectManager implements Listener {
         FarmObjectType type = typeOf(block);
         if (type == null) return;
 
-        FarmObjectKey objectKey = FarmObjectKey.of(block.getLocation());
-        objects.remove(objectKey);
-        if (areaAnalyzer != null) areaAnalyzer.invalidate(objectKey);
+        FarmObjectKey key = FarmObjectKey.of(block.getLocation());
+        objects.remove(key);
+        if (areaAnalyzer != null) areaAnalyzer.invalidate(key);
 
         if (!(block.getState() instanceof Barrel barrel)) return;
         event.setDropItems(false);
@@ -141,9 +137,7 @@ public final class FarmObjectManager implements Listener {
     }
 
     private boolean hasKey(Block block, String key) {
-        if (block == null || block.getType() != Material.BARREL || !(block.getState() instanceof Barrel barrel)) {
-            return false;
-        }
+        if (block == null || block.getType() != Material.BARREL || !(block.getState() instanceof Barrel barrel)) return false;
         return barrel.getPersistentDataContainer().has(keyOf(key), PersistentDataType.BYTE);
     }
 
