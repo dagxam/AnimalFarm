@@ -41,6 +41,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(farmObjectManager, this);
         getServer().getPluginManager().registerEvents(new DropManager(this), this);
         getServer().getPluginManager().registerEvents(milkManager, this);
+        getServer().getPluginManager().registerEvents(new FishingManager(), this);
 
         AnimalFarmCommand command = new AnimalFarmCommand(this);
         Objects.requireNonNull(getCommand("animalfarm")).setExecutor(command);
@@ -53,7 +54,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         startTickTask();
         startFarmTask();
 
-        getLogger().info("AnimalFarm включён. Единый процессор фермы активен.");
+        getLogger().info("AnimalFarm включён. Единый процессор фермы и улучшенная рыбалка активны.");
     }
 
     @Override
