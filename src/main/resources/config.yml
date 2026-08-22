@@ -1,108 +1,86 @@
 # ============================================================
-# AnimalFarm — основная конфигурация плагина
-#
-# true  = включено
-# false = выключено
-# После изменений: /animalfarm reload
+# AnimalFarm — полная конфигурация фермы v2
+# true = включено | false = выключено
+# После изменения: /animalfarm reload
 # ============================================================
 
 feeder:
-  # Включить автоматические кормушки.
   enabled: true
-
-  # Интервал проверки активных кормушек, секунд.
   check-interval-seconds: 5
-
-  # Дальность, на которой животное считается рядом с кормушкой.
   eating-distance: 2.5
-
-  # Максимум пар автоматического размножения за сутки на кормушку.
   max-breeding-pairs-per-day: 10
-
-  # Максимум вёдер в одном водном стеке.
   water-max-stack: 16
-
-  # Каждый обычный цикл размножения потребляет случайно 3-5 единиц еды.
-  # Для рыб действует такой же расход.
+  # Максимум животных в одном загоне. При достижении лимита новые животные не рождаются.
+  capacity: 20
 
 pen:
-  # Максимальный размер закрытого пространства вокруг кормушки.
   max-radius: 16
-
-  # Допустимая высота пространства вверх/вниз.
   vertical-range: 5
-
-  # Граница может быть любым непроходимым блоком.
-  # Забор/стекло больше НЕ обязательны.
+  # Загон может быть сделан из любых полноценных закрывающих блоков.
+  # Забор и стекло не обязательны.
 
 aquarium:
-  # Включить автоматические рыбные кормушки.
   enabled: true
-
-  # Максимальный размер закрытого пространства вокруг кормушки.
   max-radius: 16
-
-  # Допустимая высота пространства вверх/вниз.
   vertical-range: 5
-
-  # Достаточно любого полностью закрытого пространства, внутри которого есть вода.
+  # Максимум рыб в одном аквариуме.
+  capacity: 30
 
 hud:
-  # Показывать данные кормушки при наведении на неё.
   enabled: true
-
-  # Дальность наведения.
   range: 6
 
+# Суточное питание. Один успешный цикл автоматически расходует случайно 3-5 единиц подходящей еды.
+feeding:
+  daily-consumption-min: 3
+  daily-consumption-max: 5
+  cow: { foods: [HAY_BLOCK, WHEAT, APPLE, MELON_SLICE, PUMPKIN, MELON] }
+  sheep: { foods: [HAY_BLOCK, WHEAT, ANY_GRASS_LEAVES_BUSHES_FLOWERS] }
+  goat: { foods: [HAY_BLOCK, WHEAT, ANY_GRASS_LEAVES_BUSHES_FLOWERS] }
+  horse: { foods: [HAY_BLOCK, WHEAT, ANY_GRASS_LEAVES_BUSHES_FLOWERS] }
+  rabbit: { foods: [CARROT, GOLDEN_CARROT] }
+  chicken: { foods: [ANY_SEEDS, ANY_GRASS_LEAVES_BUSHES_FLOWERS] }
+  fish: { foods: [ANY_SEEDS, SEAGRASS, KELP, SEA_PICKLE] }
+
+# Золотой режим: золотое яблоко или золотая морковь запускают ускоренный режим кормушки.
+# В этот день выполняется 2-3 цикла размножения и 2-3 цикла производства, если хватает места и ресурсов.
+golden:
+  cycles-min: 2
+  cycles-max: 3
+
 mob-bucket:
-  # Специальное ведро для мобов.
   enabled: true
 
 fishing:
-  # Живая ловля существ вместо обычной добычи.
   enabled: true
-
-  # Вероятность живого улова, процент.
   live-catch-chance: 90
-
+  # Обычные рыбы выдаются как предметы: треска, лосось, тропическая рыба, иглобрюх.
+  # Остальные существа выдаются яйцом призыва.
+  # Свежую рыбу из инвентаря можно отпустить правой кнопкой по воде.
   mobs:
-    # Треска, лосось, тропическая рыба, иглобрюх.
     fish: true
-    # Аксолотль.
     axolotl: true
-    # Кальмар.
     squid: true
-    # Светящийся кальмар.
     glow-squid: true
-    # Черепаха.
     turtle: true
-    # Дельфин.
     dolphin: true
-    # Лягушка.
     frog: true
 
-  # Если для существа есть ванильное яйцо призыва, улов выдаётся этим яйцом.
-  # Само существо не теряется.
-
 milking:
-  # Разрешить доение взрослых животных.
   enabled: true
   animals:
     cow: true
     sheep: true
     goat: true
-
-  # Количество обычного автоматического молока в сутки.
-  # Используется как диапазон 1-3 при наличии пустых вёдер.
   milk-min: 1
   milk-max: 3
 
 baby:
-  # Требуемое количество кормлений молоком выбирается случайно.
   milk-feedings-min: 1
   milk-feedings-max: 3
 
 production:
+  # Количество продукции выбирается случайно между min и max и ограничивается числом взрослых животных.
   chicken:
     eggs-min: 5
     eggs-max: 10
@@ -111,59 +89,18 @@ production:
     max: 3
 
 drops:
-  cow:
-    meat: { min: 1, max: 1 }
-    leather: { min: 1, max: 1 }
-    bone: { min: 2, max: 2 }
-  sheep:
-    meat: { min: 1, max: 1 }
-    leather: { min: 1, max: 1 }
-    wool: { min: 1, max: 1 }
-    bone: { min: 1, max: 1 }
-  goat:
-    meat: { min: 1, max: 1 }
-    leather: { min: 1, max: 1 }
-    bone: { min: 1, max: 1 }
-  chicken:
-    meat: { min: 1, max: 1 }
-    feather: { min: 2, max: 2 }
-  horse:
-    meat: { min: 1, max: 1 }
-    leather: { min: 1, max: 1 }
-    bone: { min: 2, max: 2 }
-  rabbit:
-    meat: { min: 1, max: 1 }
-    rabbit-hide: { min: 1, max: 1 }
-    bone: { min: 1, max: 1 }
-
-feeding:
-  # Базовые списки кормов. Группы семян обрабатываются кодом.
-  cow:
-    foods: [HAY_BLOCK, WHEAT, APPLE, MELON_SLICE, PUMPKIN, MELON]
-  sheep:
-    foods: [HAY_BLOCK, WHEAT, ANY_GRASS_LEAVES_BUSHES_FLOWERS]
-  goat:
-    foods: [HAY_BLOCK, WHEAT, ANY_GRASS_LEAVES_BUSHES_FLOWERS]
-  horse:
-    foods: [HAY_BLOCK, WHEAT, ANY_GRASS_LEAVES_BUSHES_FLOWERS]
-  rabbit:
-    foods: [CARROT, GOLDEN_CARROT]
-  chicken:
-    foods: [ANY_SEEDS, ANY_GRASS_LEAVES_BUSHES_FLOWERS]
-  fish:
-    foods: [ANY_SEEDS, SEAGRASS, KELP, SEA_PICKLE]
-
-# Золотое ускорение:
-# золотое яблоко или золотая морковь в кормушке дают ускоренное размножение.
-# Для такой пары кулдаун равен 1-2 игровым дням вместо обычных 1-3.
-# В обычном цикле животное/рыба размножается автоматически не чаще одного раза
-# после выбранного случайного интервала 1-3 дня.
+  cow: { meat: { min: 1, max: 1 }, leather: { min: 1, max: 1 }, bone: { min: 2, max: 2 } }
+  sheep: { meat: { min: 1, max: 1 }, leather: { min: 1, max: 1 }, wool: { min: 1, max: 1 }, bone: { min: 1, max: 1 } }
+  goat: { meat: { min: 1, max: 1 }, leather: { min: 1, max: 1 }, bone: { min: 1, max: 1 } }
+  chicken: { meat: { min: 1, max: 1 }, feather: { min: 2, max: 2 } }
+  horse: { meat: { min: 1, max: 1 }, leather: { min: 1, max: 1 }, bone: { min: 2, max: 2 } }
+  rabbit: { meat: { min: 1, max: 1 }, rabbit-hide: { min: 1, max: 1 }, bone: { min: 1, max: 1 } }
 
 messages:
   prefix: "&8[&6AnimalFarm&8] &r"
   no-permission: "&cУ вас нет прав для выполнения этой команды."
   reloaded: "&aКонфигурация успешно перезагружена."
-  info: "&fAnimalFarm &7— &eсистема животноводства, кормушек и аквариумов."
+  info: "&fAnimalFarm &7— &eсистема животноводства, аквакультуры и рыбалки."
   milk-cow: "&aВы надоили корову."
   milk-sheep: "&aВы надоили овцу."
   milk-goat: "&aВы надоили козу."
