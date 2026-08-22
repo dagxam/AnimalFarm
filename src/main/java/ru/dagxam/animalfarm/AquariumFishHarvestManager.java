@@ -17,7 +17,7 @@ import org.bukkit.util.RayTraceResult;
 
 import java.util.Comparator;
 
-/** Allows taking one fish from a registered aquarium with a right click on water. */
+/** Allows taking one supported aquarium creature with a right click on water. */
 public final class AquariumFishHarvestManager implements Listener {
     private static final double MAX_INTERACTION_DISTANCE = 6.0D;
 
@@ -53,22 +53,26 @@ public final class AquariumFishHarvestManager implements Listener {
         Location target = water.getLocation().add(0.5, 0.5, 0.5);
         Location center = aquarium.clone().add(0.5, 0.5, 0.5);
 
-        Entity fish = water.getWorld().getNearbyEntities(target, radius, vertical, radius, entity ->
-                        entity instanceof Fish && isInsideAquarium(entity.getLocation(), center, radius, vertical))
+        Entity creature = water.getWorld().getNearbyEntities(target, radius, vertical, radius, entity ->
+                        isSupportedAquariumCreature(entity) && isInsideAquarium(entity.getLocation(), center, radius, vertical))
                 .stream()
                 .min(Comparator.comparingDouble(entity -> entity.getLocation().distanceSquared(target)))
                 .orElse(null);
 
-        if (fish == null) {
+        if (creature == null) {
             player.sendMessage(plugin.message("aquarium-no-fish"));
             event.setCancelled(true);
             return;
         }
 
-        ItemStack item = toFishItem(fish.getType());
-        if (item == null) return;
+        ItemStack item = toHarvestItem(creature.getType());
+        if (item == null) {
+            player.sendMessage(plugin.message("aquarium-no-fish"));
+            event.setCancelled(true);
+            return;
+        }
 
-        fish.remove();
+        creature.remove();
         event.setCancelled(true);
         var leftovers = player.getInventory().addItem(item);
         leftovers.values().forEach(leftover -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
@@ -125,12 +129,22 @@ public final class AquariumFishHarvestManager implements Listener {
                 || item.getType() == Material.PUFFERFISH;
     }
 
-    private ItemStack toFishItem(EntityType type) {
+    private boolean isSupportedAquariumCreature(Entity entity) {
+        return entity instanceof Fish || toHarvestItem(entity.getType()) != null;
+    }
+
+    private ItemStack toHarvestItem(EntityType type) {
         return switch (type) {
             case COD -> new ItemStack(Material.COD);
             case SALMON -> new ItemStack(Material.SALMON);
             case TROPICAL_FISH -> new ItemStack(Material.TROPICAL_FISH);
             case PUFFERFISH -> new ItemStack(Material.PUFFERFISH);
+            case AXOLOTL -> new ItemStack(Material.AXOLOTL_SPAWN_EGG);
+            case SQUID -> new ItemStack(Material.SQUID_SPAWN_EGG);
+            case GLOW_SQUID -> new ItemStack(Material.GLOW_SQUID_SPAWN_EGG);
+            case TURTLE -> new ItemStack(Material.TURTLE_SPAWN_EGG);
+            case DOLPHIN -> new ItemStack(Material.DOLPHIN_SPAWN_EGG);
+            case FROG -> new ItemStack(Material.FROG_SPAWN_EGG);
             default -> null;
         };
     }
