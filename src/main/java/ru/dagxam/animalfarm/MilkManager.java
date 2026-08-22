@@ -46,7 +46,10 @@ public final class MilkManager implements Listener {
             feedBaby(event, animal);
             return;
         }
-        if (!animal.isAdult() || hand.getType() != Material.BUCKET) return;
+
+        // Обычный ПКМ ведром оставлен для специального моб-ведра.
+        // Доение выполняется только осознанно: Shift + ПКМ.
+        if (!animal.isAdult() || hand.getType() != Material.BUCKET || !event.getPlayer().isSneaking()) return;
 
         event.setCancelled(true);
         long day = animal.getWorld().getFullTime() / 24000L;
