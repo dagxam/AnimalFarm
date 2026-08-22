@@ -35,9 +35,7 @@ public final class FarmObjectManager implements Listener {
     public void setAreaAnalyzer(FarmAreaAnalyzer areaAnalyzer) { this.areaAnalyzer = areaAnalyzer; }
 
     public void registerLoaded() {
-        for (var world : plugin.getServer().getWorlds()) {
-            for (Chunk chunk : world.getLoadedChunks()) registerChunk(chunk);
-        }
+        for (var world : plugin.getServer().getWorlds()) for (Chunk chunk : world.getLoadedChunks()) registerChunk(chunk);
     }
 
     public void registerChunk(Chunk chunk) {
@@ -71,6 +69,7 @@ public final class FarmObjectManager implements Listener {
     }
 
     public boolean canAccess(Player player, Block block) {
+        if (!plugin.settings().ownershipEnabled()) return true;
         UUID owner = ownerOf(block);
         return owner == null || owner.equals(player.getUniqueId()) || player.hasPermission("animalfarm.admin");
     }
@@ -130,9 +129,7 @@ public final class FarmObjectManager implements Listener {
         ItemStack objectItem = type == FarmObjectType.LAND_FEEDER ? plugin.createFeederItem() : plugin.createAquariumShelfItem();
         Location location = block.getLocation();
         block.getWorld().dropItemNaturally(location, objectItem);
-        for (ItemStack item : barrel.getInventory().getContents()) {
-            if (item != null && !item.getType().isAir()) block.getWorld().dropItemNaturally(location, item.clone());
-        }
+        for (ItemStack item : barrel.getInventory().getContents()) if (item != null && !item.getType().isAir()) block.getWorld().dropItemNaturally(location, item.clone());
     }
 
     private boolean hasKey(Block block, String key) {
