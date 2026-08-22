@@ -93,7 +93,7 @@ public final class MobBucketManager implements Listener {
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return item;
         meta.setDisplayName(color("&6Ведро для мобов"));
-        meta.setLore(java.util.List.of(color("&7ПКМ по мобу — поместить его в ведро."), color("&7ПКМ по свободному месту — выпустить моба.")));
+        meta.setLore(java.util.List.of(color("&7ПКМ по мобу — поместить его в ведро."), color("&7Shift + ПКМ по корове, козе или овце — доить."), color("&7ПКМ по свободному месту — выпустить моба.")));
         meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
         meta.getPersistentDataContainer().set(bucketKey, PersistentDataType.BYTE, (byte) 1);
         item.setItemMeta(meta);
@@ -119,6 +119,7 @@ public final class MobBucketManager implements Listener {
         ItemStack bucket = player.getInventory().getItemInMainHand();
         if (!isBucket(bucket) || hasMob(bucket)) return;
         Entity target = event.getRightClicked();
+        if (player.isSneaking() && isMilkAnimal(target)) return;
         if (!(target instanceof LivingEntity living) || target instanceof Player || target instanceof org.bukkit.entity.ArmorStand || target.isDead()) return;
         event.setCancelled(true);
         ItemStack filled = createFilledBucket(living);
@@ -164,6 +165,13 @@ public final class MobBucketManager implements Listener {
         } catch (IllegalArgumentException ex) {
             player.sendMessage(color("&8[&6AnimalFarm&8] &cНе удалось восстановить моба из ведра."));
         }
+    }
+
+    private boolean isMilkAnimal(Entity entity) {
+        return switch (entity.getType()) {
+            case COW, GOAT, SHEEP -> true;
+            default -> false;
+        };
     }
 
     private ItemStack createFilledBucket(LivingEntity entity) {
