@@ -59,6 +59,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         pm.registerEvents(fishingManager, this);
         pm.registerEvents(hudManager, this);
         pm.registerEvents(new FreshFishReleaseManager(this), this);
+        pm.registerEvents(new AquariumFishHarvestManager(this), this);
     }
 
     private void registerCommand() {
