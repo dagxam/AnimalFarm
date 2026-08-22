@@ -10,13 +10,9 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
-import java.util.List;
-
 public final class AnimalFarmPlugin extends JavaPlugin {
-
     private long serverTick;
     private BukkitTask tickTask;
-
     private FarmSettings settings;
     private FarmAreaAnalyzer areaAnalyzer;
     private FarmObjectManager farmObjectManager;
@@ -26,8 +22,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
     private FishingManager fishingManager;
     private FarmHudManager hudManager;
 
-    @Override
-    public void onEnable() {
+    @Override public void onEnable() {
         saveDefaultConfig();
         loadManagers();
         registerListeners();
@@ -37,8 +32,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         startFarmTask();
     }
 
-    @Override
-    public void onDisable() {
+    @Override public void onDisable() {
         if (tickTask != null) tickTask.cancel();
         if (taskScheduler != null) taskScheduler.stop();
         if (farmObjectManager != null) farmObjectManager.clear();
@@ -58,19 +52,18 @@ public final class AnimalFarmPlugin extends JavaPlugin {
     }
 
     private void registerListeners() {
-        getServer().getPluginManager().registerEvents(farmObjectManager, this);
-        getServer().getPluginManager().registerEvents(new DropManager(this), this);
-        getServer().getPluginManager().registerEvents(milkManager, this);
-        getServer().getPluginManager().registerEvents(fishingManager, this);
-        getServer().getPluginManager().registerEvents(hudManager, this);
+        var pm = getServer().getPluginManager();
+        pm.registerEvents(farmObjectManager, this);
+        pm.registerEvents(new DropManager(this), this);
+        pm.registerEvents(milkManager, this);
+        pm.registerEvents(fishingManager, this);
+        pm.registerEvents(hudManager, this);
+        pm.registerEvents(new FreshFishReleaseManager(this), this);
     }
 
     private void registerCommand() {
         PluginCommand command = getCommand("animalfarm");
-        if (command == null) {
-            getLogger().warning("Команда /animalfarm не найдена в plugin.yml");
-            return;
-        }
+        if (command == null) { getLogger().warning("Команда /animalfarm не найдена в plugin.yml"); return; }
         AnimalFarmCommand executor = new AnimalFarmCommand(this);
         command.setExecutor(executor);
         command.setTabCompleter(executor);
@@ -90,31 +83,17 @@ public final class AnimalFarmPlugin extends JavaPlugin {
 
     public FarmSettings settings() { return settings; }
     public FarmObjectManager farmObjectManager() { return farmObjectManager; }
+    public String message(String key) { return org.bukkit.ChatColor.translateAlternateColorCodes('&', getConfig().getString("messages." + key, "")); }
 
-    public String message(String key) {
-        String value = getConfig().getString("messages." + key, "");
-        return org.bukkit.ChatColor.translateAlternateColorCodes('&', value);
-    }
+    public ItemStack createFeederItem() { return createTaggedItem("§6Кормушка", "feeder_item"); }
+    public ItemStack createAquariumShelfItem() { return createTaggedItem("§bАквариумная кормушка", "aquarium_shelf_item"); }
 
-    public ItemStack createFeederItem() {
+    private ItemStack createTaggedItem(String name, String keyName) {
         ItemStack item = new ItemStack(Material.BARREL);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName("§6Кормушка");
-            meta.getPersistentDataContainer().set(new NamespacedKey(this, "feeder_item"),
-                    org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
-            item.setItemMeta(meta);
-        }
-        return item;
-    }
-
-    public ItemStack createAquariumShelfItem() {
-        ItemStack item = new ItemStack(Material.BARREL);
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            meta.setDisplayName("§bАквариумная кормушка");
-            meta.getPersistentDataContainer().set(new NamespacedKey(this, "aquarium_shelf_item"),
-                    org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
+            meta.setDisplayName(name);
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, keyName), org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
             item.setItemMeta(meta);
         }
         return item;
@@ -123,36 +102,20 @@ public final class AnimalFarmPlugin extends JavaPlugin {
     private void registerRecipes() {
         NamespacedKey feederKey = new NamespacedKey(this, "feeder");
         getServer().removeRecipe(feederKey);
-        ShapedRecipe feederRecipe = new ShapedRecipe(feederKey, createFeederItem());
-        feederRecipe.shape("BB", "BB");
-        feederRecipe.setIngredient('B', Material.BARREL);
-        getServer().addRecipe(feederRecipe);
+        ShapedRecipe feeder = new ShapedRecipe(feederKey, createFeederItem());
+        feeder.shape("BB", "BB"); feeder.setIngredient('B', Material.BARREL); getServer().addRecipe(feeder);
 
-        NamespacedKey shelfKey = new NamespacedKey(this, "aquarium_shelf");
-        getServer().removeRecipe(shelfKey);
-        ShapedRecipe fishFeeder = new ShapedRecipe(shelfKey, createAquariumShelfItem());
-        fishFeeder.shape("FF", "FF");
-        fishFeeder.setIngredient('F', new RecipeChoice.MaterialChoice(
-                Material.COD_SPAWN_EGG,
-                Material.SALMON_SPAWN_EGG,
-                Material.TROPICAL_FISH_SPAWN_EGG,
-                Material.PUFFERFISH_SPAWN_EGG
-        ));
-        getServer().addRecipe(fishFeeder);
+        NamespacedKey fishKey = new NamespacedKey(this, "aquarium_shelf");
+        getServer().removeRecipe(fishKey);
+        ShapedRecipe fish = new ShapedRecipe(fishKey, createAquariumShelfItem());
+        fish.shape("FF", "FF");
+        fish.setIngredient('F', new RecipeChoice.MaterialChoice(Material.COD_SPAWN_EGG, Material.SALMON_SPAWN_EGG, Material.TROPICAL_FISH_SPAWN_EGG, Material.PUFFERFISH_SPAWN_EGG));
+        getServer().addRecipe(fish);
     }
 
-    private void startTickTask() {
-        tickTask = getServer().getScheduler().runTaskTimer(this, () -> serverTick++, 1L, 1L);
-    }
-
-    private void startFarmTask() {
-        taskScheduler.startFarmTask(this::processFarmObjects, settings.feederCheckIntervalTicks());
-    }
-
-    private void restartFarmTask() {
-        taskScheduler.stop();
-        startFarmTask();
-    }
+    private void startTickTask() { tickTask = getServer().getScheduler().runTaskTimer(this, () -> serverTick++, 1L, 1L); }
+    private void startFarmTask() { taskScheduler.startFarmTask(this::processFarmObjects, settings.feederCheckIntervalTicks()); }
+    private void restartFarmTask() { taskScheduler.stop(); startFarmTask(); }
 
     private void processFarmObjects() {
         for (FarmObjectKey key : farmObjectManager.objects()) {
