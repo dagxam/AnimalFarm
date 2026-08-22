@@ -17,6 +17,8 @@ public final class FarmSettings {
     public int aquariumMaxRadius() { return Math.max(4, config.getInt("aquarium.max-radius", 16)); }
     public int aquariumVerticalRange() { return Math.max(3, config.getInt("aquarium.vertical-range", 5)); }
     public boolean aquariumEnabled() { return config.getBoolean("aquarium.enabled", true); }
+    public boolean aquariumOwnerOnlyHarvest() { return config.getBoolean("aquarium.owner-only-harvest", true); }
+    public boolean ownershipEnabled() { return config.getBoolean("ownership.enabled", true); }
     public int hudRange() { return Math.max(1, config.getInt("hud.range", 6)); }
     public int milkFeedingsMin() { return Math.max(1, config.getInt("baby.milk-feedings-min", 1)); }
     public int milkFeedingsMax() { return Math.max(milkFeedingsMin(), config.getInt("baby.milk-feedings-max", 3)); }
