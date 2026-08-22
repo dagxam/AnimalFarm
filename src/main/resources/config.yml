@@ -1,9 +1,7 @@
 # ============================================================
 # AnimalFarm — полная конфигурация фермы v2
-# true = включено | false = выключено
 # После изменения: /animalfarm reload
 # ============================================================
-
 feeder:
   enabled: true
   check-interval-seconds: 5
@@ -11,30 +9,23 @@ feeder:
   max-breeding-pairs-per-day: 10
   water-max-stack: 16
   capacity: 20
-
 pen:
   max-radius: 16
   vertical-range: 5
-
 aquarium:
   enabled: true
   max-radius: 16
   vertical-range: 5
   capacity: 30
-  # Рыбу можно забрать только ПКМ по воде внутри аквариума.
-  # Владельцу всегда разрешено. Администратор с animalfarm.admin также имеет доступ.
   owner-only-harvest: true
-
 ownership:
   enabled: true
-  # Владельцем кормушки или аквариума становится игрок, который его установил.
-  # Владелец сохраняется в самом блоке и не теряется после перезапуска сервера.
-  # Сейчас защита владельца применяется к разбору объекта и забору рыбы из аквариума.
-
+  # Владелец — игрок, установивший объект.
+  # Доверенные игроки могут пользоваться фермой, забирать рыбу и продукцию.
+  # Ломать объект, добавлять/удалять доверенных и передавать владение может только владелец.
 hud:
   enabled: true
   range: 6
-
 feeding:
   daily-consumption-min: 3
   daily-consumption-max: 5
@@ -45,47 +36,26 @@ feeding:
   rabbit: { foods: [CARROT, GOLDEN_CARROT] }
   chicken: { foods: [ANY_SEEDS, ANY_GRASS_LEAVES_BUSHES_FLOWERS] }
   fish: { foods: [ANY_SEEDS, SEAGRASS, KELP, SEA_PICKLE] }
-
 golden:
   cycles-min: 2
   cycles-max: 3
-
 mob-bucket:
   enabled: true
-
 fishing:
   enabled: true
   live-catch-chance: 90
-  mobs:
-    fish: true
-    axolotl: true
-    squid: true
-    glow-squid: true
-    turtle: true
-    dolphin: true
-    frog: true
-
+  mobs: { fish: true, axolotl: true, squid: true, glow-squid: true, turtle: true, dolphin: true, frog: true }
 milking:
   enabled: true
-  animals:
-    cow: true
-    sheep: true
-    goat: true
+  animals: { cow: true, sheep: true, goat: true }
   milk-min: 1
   milk-max: 3
-
 baby:
   milk-feedings-min: 1
   milk-feedings-max: 3
-
 production:
-  chicken:
-    eggs-min: 5
-    eggs-max: 10
-  wool:
-    min: 2
-    max: 3
-
+  chicken: { eggs-min: 5, eggs-max: 10 }
+  wool: { min: 2, max: 3 }
 drops:
   cow: { meat: { min: 1, max: 1 }, leather: { min: 1, max: 1 }, bone: { min: 2, max: 2 } }
   sheep: { meat: { min: 1, max: 1 }, leather: { min: 1, max: 1 }, wool: { min: 1, max: 1 }, bone: { min: 1, max: 1 } }
@@ -93,7 +63,6 @@ drops:
   chicken: { meat: { min: 1, max: 1 }, feather: { min: 2, max: 2 } }
   horse: { meat: { min: 1, max: 1 }, leather: { min: 1, max: 1 }, bone: { min: 2, max: 2 } }
   rabbit: { meat: { min: 1, max: 1 }, rabbit-hide: { min: 1, max: 1 }, bone: { min: 1, max: 1 } }
-
 messages:
   prefix: "&8[&6AnimalFarm&8] &r"
   no-permission: "&cУ вас нет прав для выполнения этой команды."
