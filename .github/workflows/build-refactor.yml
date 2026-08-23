@@ -1,4 +1,4 @@
-name: Build AnimalFarm Refactor for Purpur
+name: Build AnimalFarm Refactor
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    name: Refactor build against Purpur API
+    name: Refactor Maven build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -20,5 +20,5 @@ jobs:
           distribution: temurin
           java-version: '26'
           cache: maven
-      - name: Build against Purpur API
+      - name: Build plugin
         run: mvn -B -U clean package
