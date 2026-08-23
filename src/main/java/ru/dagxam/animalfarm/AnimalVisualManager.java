@@ -11,12 +11,14 @@ import java.lang.reflect.Method;
 /**
  * Визуальная часть системы пола без Resource Pack, моделей и подмены сущностей.
  *
- * Пока используются только два ванильных визуальных признака:
- * - самец-корова (бык) получает встроенный WARM-вариант коровы;
+ * Используются только встроенные ванильные варианты:
+ * - самец-корова (бык) получает WARM-вариант коровы;
+ * - самец-свинья (хряк) получает WARM-вариант свиньи;
  * - самец-овца (баран) получает чёрную шерсть.
  *
- * Остальные животные пока не меняют внешний вид. Это намеренно: не подменяем
- * ванильную текстуру случайными вариантами и не создаём дополнительные сущности.
+ * Самки используют обычные варианты TEMPERATE, поэтому корова и свинья остаются
+ * визуально стандартными. Вариант применяется и взрослым, и детёнышам сразу
+ * после назначения пола.
  */
 public final class AnimalVisualManager {
     private final AnimalFarmPlugin plugin;
@@ -46,13 +48,20 @@ public final class AnimalVisualManager {
         }
 
         if (animal.getType().name().equals("COW")) {
-            applyCowVariant(animal, gender);
+            applyVariant(animal, "org.bukkit.entity.Cow$Variant", gender);
+            return;
+        }
+
+        if (animal.getType().name().equals("PIG")) {
+            applyVariant(animal, "org.bukkit.entity.Pig$Variant", gender);
         }
     }
 
-    private void applyCowVariant(Animals animal, AnimalGender gender) {
+    private void applyVariant(Animals animal, String variantClassName, AnimalGender gender) {
         try {
-            Class<?> variantClass = Class.forName("org.bukkit.entity.Cow$Variant");
+            Class<?> variantClass = Class.forName(variantClassName);
+            // WARM — коричневый ванильный вариант для самцов.
+            // TEMPERATE — обычный розовый вариант для самок.
             Object variant = getVariantConstant(
                     variantClass,
                     gender == AnimalGender.MALE ? "WARM" : "TEMPERATE"
@@ -64,7 +73,7 @@ public final class AnimalVisualManager {
                 setVariant.invoke(animal, variant);
             }
         } catch (ReflectiveOperationException | RuntimeException ignored) {
-            // Если используемое Bukkit-совместимое API не поддерживает варианты коров,
+            // Если используемое Bukkit-совместимое API не поддерживает варианты,
             // плагин продолжает работать, а визуальное изменение просто пропускается.
         }
     }
