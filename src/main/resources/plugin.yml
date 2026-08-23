@@ -2,8 +2,8 @@ name: AnimalFarm
 version: 1.0.0
 author: dagxam
 main: ru.dagxam.animalfarm.AnimalFarmPlugin
-api-version: '26.2'
-description: Расширенная система животноводства, кормушек, владельцев и аквакультуры для Purpur.
+api-version: '1.21'
+description: Расширенная система животноводства, кормушек, владельцев и аквакультуры.
 website: https://github.com/dagxam/AnimalFarm
 
 commands:
