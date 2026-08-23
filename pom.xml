@@ -10,23 +10,25 @@
     <packaging>jar</packaging>
 
     <properties>
-        <!-- Paper 26.2 требует современный Java runtime. Проект собираем именно Java 26. -->
+        <!-- Целевой сервер: Purpur 26.2. -->
         <maven.compiler.release>26</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
     <repositories>
         <repository>
-            <id>papermc</id>
-            <url>https://repo.papermc.io/repository/maven-public/</url>
+            <id>purpur</id>
+            <name>Purpur Maven Repository</name>
+            <url>https://repo.purpurmc.org/snapshots</url>
         </repository>
     </repositories>
 
     <dependencies>
-        <!-- Paper 26.2. Используем диапазон, чтобы GitHub Actions брал актуальный build 26.2. -->
+        <!-- Компилируем напрямую против Purpur API.
+             Purpur включает API Bukkit, Spigot, Paper и Pufferfish. -->
         <dependency>
-            <groupId>io.papermc.paper</groupId>
-            <artifactId>paper-api</artifactId>
+            <groupId>org.purpurmc.purpur</groupId>
+            <artifactId>purpur-api</artifactId>
             <version>[26.2.build,)</version>
             <scope>provided</scope>
         </dependency>
@@ -51,7 +53,9 @@
                 <executions>
                     <execution>
                         <phase>package</phase>
-                        <goals><goal>shade</goal></goals>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
                         <configuration>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
                         </configuration>
