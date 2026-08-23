@@ -1,9 +1,7 @@
 package ru.dagxam.animalfarm;
 
-import org.bukkit.DyeColor;
 import org.bukkit.entity.Animals;
 import org.bukkit.entity.Entity;
-import org.bukkit.entity.Sheep;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -46,10 +44,9 @@ public final class AnimalVisualManager {
 
         AnimalGender gender = genders.getOrAssign(animal);
 
-        if (animal instanceof Sheep sheep) {
-            if (gender == AnimalGender.MALE) {
-                sheep.setColor(DyeColor.BLACK);
-            }
+        if (animal instanceof org.bukkit.entity.Sheep) {
+            // Цвет овцы не меняем: он и есть визуальный признак пола.
+            // Чёрная и серая овца = баран, остальные цвета = овца.
             return;
         }
 
