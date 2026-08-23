@@ -36,27 +36,25 @@ public final class AnimalVisualManager {
 
         AnimalGender gender = genders.getOrAssign(animal);
 
-        // Баран: встроенный и безопасный ванильный признак.
         if (animal instanceof Sheep sheep) {
             if (gender == AnimalGender.MALE) sheep.setColor(DyeColor.BLACK);
             return;
         }
 
-        // В Minecraft 1.21.5+ корова, свинья и курица имеют реальные варианты.
-        // WARM используется для самца, TEMPERATE — для самки.
         switch (animal.getType()) {
-            case COW, PIG, CHICKEN -> applyFarmVariant(animal, gender);
+            case COW -> applyFarmVariant(animal, gender, "org.bukkit.entity.Cow$Variant");
+            case PIG -> applyFarmVariant(animal, gender, "org.bukkit.entity.Pig$Variant");
+            case CHICKEN -> applyFarmVariant(animal, gender, "org.bukkit.entity.Chicken$Variant");
             case GOAT -> {
                 // У козы нет встроенного ванильного texture-variant API.
-                // Пол продолжает показываться HUD/информацией без подмены модели.
             }
             default -> { }
         }
     }
 
-    private void applyFarmVariant(Animals animal, AnimalGender gender) {
+    private void applyFarmVariant(Animals animal, AnimalGender gender, String variantClassName) {
         try {
-            Class<?> variantClass = Class.forName(animal.getClass().getInterfaces()[0].getName() + "$Variant");
+            Class<?> variantClass = Class.forName(variantClassName);
             Object variant = getVariantConstant(variantClass,
                     gender == AnimalGender.MALE ? "WARM" : "TEMPERATE");
             if (variant == null) return;
@@ -65,7 +63,7 @@ public final class AnimalVisualManager {
             if (setVariant == null) return;
             setVariant.invoke(animal, variant);
         } catch (ReflectiveOperationException | RuntimeException ignored) {
-            // Ядро не поддерживает этот вариант API. Плагин продолжает работать без текстурной подмены.
+            // Ядро не поддерживает этот API. Плагин продолжает работать без подмены текстуры.
         }
     }
 
