@@ -9,14 +9,14 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 /**
- * Визуальная часть системы пола без подмены модели.
+ * Визуальная часть системы пола без Resource Pack, моделей и подмены сущностей.
  *
- * Для коров, свиней и куриц используются реальные ванильные варианты сущностей.
- * Самец получает WARM-вариант, самка — TEMPERATE-вариант. Это меняет внешний вид
- * непосредственно у настоящего моба и не создаёт ItemDisplay или дополнительные сущности.
+ * Пока используются только два ванильных визуальных признака:
+ * - самец-корова (бык) получает встроенный WARM-вариант коровы;
+ * - самец-овца (баран) получает чёрную шерсть.
  *
- * Reflection используется намеренно: AnimalFarm собирается против совместимого API и не
- * должен переставать запускаться на ядре, где API вариантов отсутствует.
+ * Остальные животные пока не меняют внешний вид. Это намеренно: не подменяем
+ * ванильную текстуру случайными вариантами и не создаём дополнительные сущности.
  */
 public final class AnimalVisualManager {
     private final AnimalFarmPlugin plugin;
@@ -37,33 +37,35 @@ public final class AnimalVisualManager {
         AnimalGender gender = genders.getOrAssign(animal);
 
         if (animal instanceof Sheep sheep) {
-            if (gender == AnimalGender.MALE) sheep.setColor(DyeColor.BLACK);
+            // Только бараны становятся чёрными. Овцам не принудительно меняем цвет,
+            // чтобы не ломать обычные цвета и окрашивание шерсти игроками.
+            if (gender == AnimalGender.MALE) {
+                sheep.setColor(DyeColor.BLACK);
+            }
             return;
         }
 
-        switch (animal.getType()) {
-            case COW -> applyFarmVariant(animal, gender, "org.bukkit.entity.Cow$Variant");
-            case PIG -> applyFarmVariant(animal, gender, "org.bukkit.entity.Pig$Variant");
-            case CHICKEN -> applyFarmVariant(animal, gender, "org.bukkit.entity.Chicken$Variant");
-            case GOAT -> {
-                // У козы нет встроенного ванильного texture-variant API.
-            }
-            default -> { }
+        if (animal.getType().name().equals("COW")) {
+            applyCowVariant(animal, gender);
         }
     }
 
-    private void applyFarmVariant(Animals animal, AnimalGender gender, String variantClassName) {
+    private void applyCowVariant(Animals animal, AnimalGender gender) {
         try {
-            Class<?> variantClass = Class.forName(variantClassName);
-            Object variant = getVariantConstant(variantClass,
-                    gender == AnimalGender.MALE ? "WARM" : "TEMPERATE");
+            Class<?> variantClass = Class.forName("org.bukkit.entity.Cow$Variant");
+            Object variant = getVariantConstant(
+                    variantClass,
+                    gender == AnimalGender.MALE ? "WARM" : "TEMPERATE"
+            );
             if (variant == null) return;
 
             Method setVariant = findSetVariant(animal.getClass(), variantClass);
-            if (setVariant == null) return;
-            setVariant.invoke(animal, variant);
+            if (setVariant != null) {
+                setVariant.invoke(animal, variant);
+            }
         } catch (ReflectiveOperationException | RuntimeException ignored) {
-            // Ядро не поддерживает этот API. Плагин продолжает работать без подмены текстуры.
+            // Если используемое Bukkit-совместимое API не поддерживает варианты коров,
+            // плагин продолжает работать, а визуальное изменение просто пропускается.
         }
     }
 
@@ -95,7 +97,9 @@ public final class AnimalVisualManager {
         if (!enabled()) return;
         plugin.getServer().getWorlds().forEach(world -> {
             for (Entity entity : world.getEntities()) {
-                if (entity instanceof Animals animal) applyVisual(animal);
+                if (entity instanceof Animals animal) {
+                    applyVisual(animal);
+                }
             }
         });
     }
