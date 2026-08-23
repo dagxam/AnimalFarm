@@ -27,7 +27,8 @@ public final class AnimalGenderListener implements Listener {
     public void onSpawn(CreatureSpawnEvent event) {
         if (event.getEntity() instanceof Animals animal) {
             genders.assignRandomIfSupported(animal);
-            applyVisualGender(animal);
+            applySheepGender(animal);
+            plugin.visualManager().applyVisual(animal);
         }
     }
 
@@ -40,7 +41,8 @@ public final class AnimalGenderListener implements Listener {
         }
         if (event.getEntity() instanceof Animals baby) {
             genders.assignRandomIfSupported(baby);
-            applyVisualGender(baby);
+            applySheepGender(baby);
+            plugin.visualManager().applyVisual(baby);
         }
     }
 
@@ -71,7 +73,7 @@ public final class AnimalGenderListener implements Listener {
         event.getPlayer().sendMessage("&fВозраст: &e" + age);
     }
 
-    private void applyVisualGender(Animals animal) {
+    private void applySheepGender(Animals animal) {
         if (animal instanceof Sheep sheep && genders.supported(sheep)
                 && genders.getOrAssign(sheep) == AnimalGender.MALE) {
             sheep.setColor(DyeColor.BLACK);
