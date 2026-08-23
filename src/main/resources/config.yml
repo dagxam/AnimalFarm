@@ -20,18 +20,44 @@ aquarium:
   owner-only-harvest: true
 ownership:
   enabled: true
-  # Владелец — игрок, установивший объект.
-  # Доверенные игроки могут пользоваться фермой, забирать рыбу и продукцию.
-  # Ломать объект, добавлять/удалять доверенных и передавать владение может только владелец.
 hud:
   enabled: true
   range: 6
+
+# ============================================================
+# Система пола животных
+# Пол хранится непосредственно в животном через PersistentDataContainer.
+# После назначения не меняется и сохраняется после перезапуска сервера.
+# Старым животным пол назначается автоматически при первой обработке.
+# ============================================================
+animal-genders:
+  enabled: true
+  # Вероятности. Значения нормализуются автоматически; безопасно 0-100.
+  male-chance: 50
+  female-chance: 50
+  animals:
+    cow: true
+    sheep: true
+    goat: true
+    pig: true
+    chicken: true
+  interaction:
+    # ПКМ по животному без ведра показывает информацию о поле и возрасте.
+    show-info-on-right-click: true
+  breeding:
+    # При true размножаться могут только самец и самка одного вида.
+    require-male-and-female: true
+  milk:
+    # При true коровы и козы-самцы молоко не дают.
+    females-only: true
+
 feeding:
   daily-consumption-min: 3
   daily-consumption-max: 5
   cow: { foods: [HAY_BLOCK, WHEAT, APPLE, MELON_SLICE, PUMPKIN, MELON] }
   sheep: { foods: [HAY_BLOCK, WHEAT, ANY_GRASS_LEAVES_BUSHES_FLOWERS] }
   goat: { foods: [HAY_BLOCK, WHEAT, ANY_GRASS_LEAVES_BUSHES_FLOWERS] }
+  pig: { foods: [CARROT, POTATO, BEETROOT] }
   horse: { foods: [HAY_BLOCK, WHEAT, ANY_GRASS_LEAVES_BUSHES_FLOWERS] }
   rabbit: { foods: [CARROT, GOLDEN_CARROT] }
   chicken: { foods: [ANY_SEEDS, ANY_GRASS_LEAVES_BUSHES_FLOWERS] }
@@ -74,6 +100,7 @@ messages:
   milk-cow: "&aВы надоили корову."
   milk-sheep: "&aВы надоили овцу."
   milk-goat: "&aВы надоили козу."
+  milk-male: "&cЭто самец. Он не даёт молоко."
   milk-cooldown: "&eВы уже доили сегодня."
   milk-baby: "&aМалыш выпил молоко."
   milk-baby-once: "&eЭтого малыша уже кормили молоком сегодня."
