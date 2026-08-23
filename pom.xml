@@ -10,26 +10,25 @@
     <packaging>jar</packaging>
 
     <properties>
-        <!-- Целевой сервер: Purpur 26.2. -->
+        <!-- Плагин ориентирован на Bukkit API. Сервер запускается на Paper. -->
         <maven.compiler.release>26</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
     <repositories>
+        <!-- Spigot API используется только как Maven-артефакт для компиляции.
+             Код AnimalFarm использует стандартные org.bukkit.* API. -->
         <repository>
-            <id>purpur</id>
-            <name>Purpur Maven Repository</name>
-            <url>https://repo.purpurmc.org/snapshots</url>
+            <id>spigot-repo</id>
+            <url>https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url>
         </repository>
     </repositories>
 
     <dependencies>
-        <!-- Компилируем напрямую против Purpur API.
-             Purpur включает API Bukkit, Spigot, Paper и Pufferfish. -->
         <dependency>
-            <groupId>org.purpurmc.purpur</groupId>
-            <artifactId>purpur-api</artifactId>
-            <version>[26.2.build,)</version>
+            <groupId>org.spigotmc</groupId>
+            <artifactId>spigot-api</artifactId>
+            <version>1.21.11-R0.1-SNAPSHOT</version>
             <scope>provided</scope>
         </dependency>
     </dependencies>
