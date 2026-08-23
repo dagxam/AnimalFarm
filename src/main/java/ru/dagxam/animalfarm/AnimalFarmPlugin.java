@@ -18,6 +18,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
     private FarmOwnershipManager ownershipManager;
     private AnimalGenderManager genderManager;
     private AnimalGenderHudManager genderHudManager;
+    private ResourcePackManager resourcePackManager;
     private FarmProcessor farmProcessor;
     private FarmTaskScheduler taskScheduler;
     private MilkManager milkManager;
@@ -29,7 +30,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
 
     private void loadManagers() {
         settings = new FarmSettings(getConfig()); areaAnalyzer = new FarmAreaAnalyzer(settings); farmObjectManager = new FarmObjectManager(this, areaAnalyzer);
-        ownershipManager = new FarmOwnershipManager(this); genderManager = new AnimalGenderManager(this); genderHudManager = new AnimalGenderHudManager(this, genderManager); farmObjectManager.registerLoaded();
+        ownershipManager = new FarmOwnershipManager(this); genderManager = new AnimalGenderManager(this); genderHudManager = new AnimalGenderHudManager(this, genderManager); resourcePackManager = new ResourcePackManager(this); farmObjectManager.registerLoaded();
         farmProcessor = new FarmProcessor(this, settings); taskScheduler = new FarmTaskScheduler(this); milkManager = new MilkManager(this, settings);
         fishingManager = new FishingManager(this); hudManager = new FarmHudManager(this);
     }
@@ -37,7 +38,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         var pm = getServer().getPluginManager();
         pm.registerEvents(farmObjectManager, this); pm.registerEvents(new DropManager(this), this); pm.registerEvents(milkManager, this);
         pm.registerEvents(fishingManager, this); pm.registerEvents(hudManager, this); pm.registerEvents(new FreshFishReleaseManager(this), this);
-        pm.registerEvents(new AquariumFishHarvestManager(this), this); pm.registerEvents(new AnimalGenderListener(this, genderManager), this);
+        pm.registerEvents(new AquariumFishHarvestManager(this), this); pm.registerEvents(new AnimalGenderListener(this, genderManager), this); pm.registerEvents(resourcePackManager, this);
     }
     private void registerCommand() { PluginCommand command = getCommand("animalfarm"); if (command == null) { getLogger().warning("Команда /animalfarm не найдена в plugin.yml"); return; } AnimalFarmCommand executor = new AnimalFarmCommand(this); command.setExecutor(executor); command.setTabCompleter(executor); }
     public void reloadPluginConfig() { reloadConfig(); settings = new FarmSettings(getConfig()); areaAnalyzer = new FarmAreaAnalyzer(settings); farmObjectManager.setAreaAnalyzer(areaAnalyzer); farmObjectManager.clear(); farmObjectManager.registerLoaded(); farmProcessor = new FarmProcessor(this, settings); milkManager.setSettings(settings); restartFarmTask(); }
