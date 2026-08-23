@@ -28,6 +28,11 @@ public final class AnimalFarmPlugin extends JavaPlugin {
 
     @Override
     public void onEnable() {
+        if (!verifyPurpurRuntime()) {
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+
         saveDefaultConfig();
         loadManagers();
         registerListeners();
@@ -37,6 +42,8 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         startFarmTask();
         genderHudManager.start();
         visualManager.refreshLoadedAnimals();
+
+        getLogger().info("AnimalFarm запущен в режиме Purpur API: " + getServer().getBukkitVersion());
     }
 
     @Override
@@ -47,6 +54,17 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         if (visualManager != null) visualManager.shutdown();
         if (farmObjectManager != null) farmObjectManager.clear();
         if (areaAnalyzer != null) areaAnalyzer.clear();
+    }
+
+    private boolean verifyPurpurRuntime() {
+        String serverName = getServer().getName();
+        if (serverName != null && serverName.toLowerCase(java.util.Locale.ROOT).contains("purpur")) {
+            return true;
+        }
+
+        getLogger().severe("AnimalFarm настроен для работы на Purpur. Обнаружено ядро: " + serverName);
+        getLogger().severe("Установите Purpur совместимой версии и перезапустите сервер.");
+        return false;
     }
 
     private void loadManagers() {
