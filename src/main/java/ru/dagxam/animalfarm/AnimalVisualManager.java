@@ -17,10 +17,10 @@ import java.lang.reflect.Method;
  * - самец-курица (петух) получает COLD-вариант курицы;
  * - самец-овца (баран) получает чёрную шерсть.
  *
- * Самки используют обычные выбранные варианты. Для курицы это WARM-вариант,
- * поэтому петухи и цыплята-петухи используют chicken_cold/chicken_cold_baby,
- * а куры и цыплята-самки используют chicken_warm/chicken_warm_baby.
- * Вариант применяется и взрослым, и детёнышам сразу после назначения пола.
+ * Для куриц самки используют WARM или TEMPERATE-вариант, чтобы применялись
+ * стандартные chicken_warm и chicken_temperate текстуры. Выбор стабилен для
+ * конкретной сущности и не меняется после перезагрузки сервера.
+ * Детские текстуры Minecraft выбирает автоматически по варианту и возрасту.
  */
 public final class AnimalVisualManager {
     private final AnimalFarmPlugin plugin;
@@ -60,10 +60,24 @@ public final class AnimalVisualManager {
         }
 
         if (animal.getType().name().equals("CHICKEN")) {
-            // Петух — COLD, курица — WARM. Детские текстуры выбираются Minecraft
-            // автоматически из варианта и возраста сущности.
-            applyVariant(animal, "org.bukkit.entity.Chicken$Variant", gender, "COLD", "WARM");
+            applyChickenVariant(animal, gender);
         }
+    }
+
+    private void applyChickenVariant(Animals animal, AnimalGender gender) {
+        // Петух всегда COLD. Для курицы используем оба стандартных женских варианта:
+        // WARM -> chicken_warm(.png/_baby.png),
+        // TEMPERATE -> chicken_temperate(.png/_baby.png).
+        String variantName;
+        if (gender == AnimalGender.MALE) {
+            variantName = "COLD";
+        } else {
+            variantName = Math.floorMod(animal.getUniqueId().hashCode(), 2) == 0
+                    ? "WARM"
+                    : "TEMPERATE";
+        }
+
+        applyVariantByName(animal, "org.bukkit.entity.Chicken$Variant", variantName);
     }
 
     private void applyVariant(
@@ -73,9 +87,13 @@ public final class AnimalVisualManager {
             String maleVariantName,
             String femaleVariantName
     ) {
+        String variantName = gender == AnimalGender.MALE ? maleVariantName : femaleVariantName;
+        applyVariantByName(animal, variantClassName, variantName);
+    }
+
+    private void applyVariantByName(Animals animal, String variantClassName, String variantName) {
         try {
             Class<?> variantClass = Class.forName(variantClassName);
-            String variantName = gender == AnimalGender.MALE ? maleVariantName : femaleVariantName;
             Object variant = getVariantConstant(variantClass, variantName);
             if (variant == null) return;
 
