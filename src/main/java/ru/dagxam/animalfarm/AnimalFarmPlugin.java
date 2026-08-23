@@ -12,8 +12,7 @@ import org.bukkit.scheduler.BukkitTask;
 /**
  * Основной класс AnimalFarm.
  *
- * Плагин использует стандартный Spigot/Bukkit API и не привязан к конкретному ядру.
- * Поддерживаются серверы, совместимые с используемой версией Bukkit API.
+ * Плагин использует стандартный Bukkit/Spigot API и не привязан к конкретному ядру.
  */
 public final class AnimalFarmPlugin extends JavaPlugin {
     private long serverTick;
@@ -25,7 +24,6 @@ public final class AnimalFarmPlugin extends JavaPlugin {
     private AnimalGenderManager genderManager;
     private AnimalGenderHudManager genderHudManager;
     private AnimalVisualManager visualManager;
-    private ResourcePackManager resourcePackManager;
     private FarmProcessor farmProcessor;
     private FarmTaskScheduler taskScheduler;
     private MilkManager milkManager;
@@ -44,8 +42,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         genderHudManager.start();
         visualManager.refreshLoadedAnimals();
 
-        getLogger().info("AnimalFarm запущен. Сервер: "
-                + getServer().getName() + " (" + getServer().getBukkitVersion() + ")");
+        getLogger().info("AnimalFarm успешно запущен.");
     }
 
     @Override
@@ -66,7 +63,6 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         genderManager = new AnimalGenderManager(this);
         genderHudManager = new AnimalGenderHudManager(this, genderManager);
         visualManager = new AnimalVisualManager(this, genderManager);
-        resourcePackManager = new ResourcePackManager(this);
         farmObjectManager.registerLoaded();
         farmProcessor = new FarmProcessor(this, settings);
         taskScheduler = new FarmTaskScheduler(this);
@@ -85,7 +81,6 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         pm.registerEvents(new FreshFishReleaseManager(this), this);
         pm.registerEvents(new AquariumFishHarvestManager(this), this);
         pm.registerEvents(new AnimalGenderListener(this, genderManager), this);
-        pm.registerEvents(resourcePackManager, this);
     }
 
     private void registerCommand() {
