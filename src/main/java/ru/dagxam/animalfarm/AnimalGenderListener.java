@@ -13,7 +13,7 @@ import org.bukkit.event.entity.SheepDyeWoolEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.inventory.EquipmentSlot;
 
-/** Назначает пол, контролирует пары и применяет базные визуальные признаки пола. */
+/** Назначает пол, контролирует пары и применяет визуальные признаки пола. */
 public final class AnimalGenderListener implements Listener {
     private final AnimalFarmPlugin plugin;
     private final AnimalGenderManager genders;
@@ -25,11 +25,15 @@ public final class AnimalGenderListener implements Listener {
 
     @EventHandler
     public void onSpawn(CreatureSpawnEvent event) {
-        if (event.getEntity() instanceof Animals animal) {
-            genders.assignRandomIfSupported(animal);
-            applySheepGender(animal);
-            plugin.visualManager().applyVisual(animal);
-        }
+        if (!(event.getEntity() instanceof Animals animal) || !genders.supported(animal)) return;
+
+        // Пол назначается каждому обычному спавну случайно и не зависит от биома.
+        genders.assignRandomIfSupported(animal);
+        applySheepGender(animal);
+
+        // Вариант применяем после завершения спавна, чтобы биомная логика ванили
+        // не успела перезаписать выбранную текстуру.
+        plugin.visualManager().applyVisualAfterSpawn(animal);
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -39,14 +43,14 @@ public final class AnimalGenderListener implements Listener {
             event.setCancelled(true);
             return;
         }
-        if (event.getEntity() instanceof Animals baby) {
+        if (event.getEntity() instanceof Animals baby && genders.supported(baby)) {
+            // Детёныш получает свой случайный пол независимо от биома и родителей.
             genders.assignRandomIfSupported(baby);
             applySheepGender(baby);
-            plugin.visualManager().applyVisual(baby);
+            plugin.visualManager().applyVisualAfterSpawn(baby);
         }
     }
 
-    /** Баран всегда остаётся чёрным, чтобы цвет был постоянным признаком самца. */
     @EventHandler(ignoreCancelled = true)
     public void onSheepDye(SheepDyeWoolEvent event) {
         Sheep sheep = event.getEntity();
