@@ -12,8 +12,8 @@ import org.bukkit.scheduler.BukkitTask;
 /**
  * Основной класс AnimalFarm.
  *
- * Игровая логика плагина строится на стандартном Bukkit API (org.bukkit.*).
- * Целевой сервер — Paper, но плагин не зависит от Paper- или Purpur-специфичных API.
+ * Плагин использует стандартный Spigot/Bukkit API и не привязан к конкретному ядру.
+ * Поддерживаются серверы, совместимые с используемой версией Bukkit API.
  */
 public final class AnimalFarmPlugin extends JavaPlugin {
     private long serverTick;
@@ -44,7 +44,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         genderHudManager.start();
         visualManager.refreshLoadedAnimals();
 
-        getLogger().info("AnimalFarm запущен. API: Bukkit, ядро: "
+        getLogger().info("AnimalFarm запущен. Сервер: "
                 + getServer().getName() + " (" + getServer().getBukkitVersion() + ")");
     }
 
