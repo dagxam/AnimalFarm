@@ -9,6 +9,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityBreedEvent;
+import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.entity.SheepDyeWoolEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.inventory.EquipmentSlot;
@@ -23,16 +24,29 @@ public final class AnimalGenderListener implements Listener {
         this.genders = genders;
     }
 
-    @EventHandler
+    @EventHandler(ignoreCancelled = true)
     public void onSpawn(CreatureSpawnEvent event) {
-        if (!(event.getEntity() instanceof Animals animal) || !genders.supported(animal)) return;
+        handleSpawn(event.getEntity());
+    }
 
-        // Пол назначается каждому обычному спавну случайно и не зависит от биома.
+    /**
+     * Дополнительная точка обработки всех новых сущностей. Нужна для естественного
+     * спавна и генерации мира/чанков, где тип события может отличаться от ожидаемого.
+     */
+    @EventHandler(ignoreCancelled = true)
+    public void onEntitySpawn(EntitySpawnEvent event) {
+        handleSpawn(event.getEntity());
+    }
+
+    private void handleSpawn(Entity entity) {
+        if (!(entity instanceof Animals animal) || !genders.supported(animal)) return;
+
+        // Пол назначается каждому новому животному случайно и не зависит от биома.
         genders.assignRandomIfSupported(animal);
         applySheepGender(animal);
 
-        // Вариант применяем после завершения спавна, чтобы биомная логика ванили
-        // не успела перезаписать выбранную текстуру.
+        // После завершения ванильной инициализации варианта дополнительно применяем
+        // наш вариант пола на следующем тике и ещё раз с небольшой задержкой.
         plugin.visualManager().applyVisualAfterSpawn(animal);
     }
 
@@ -44,7 +58,6 @@ public final class AnimalGenderListener implements Listener {
             return;
         }
         if (event.getEntity() instanceof Animals baby && genders.supported(baby)) {
-            // Детёныш получает свой случайный пол независимо от биома и родителей.
             genders.assignRandomIfSupported(baby);
             applySheepGender(baby);
             plugin.visualManager().applyVisualAfterSpawn(baby);
