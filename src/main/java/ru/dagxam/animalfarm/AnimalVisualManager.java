@@ -2,20 +2,21 @@ package ru.dagxam.animalfarm;
 
 import org.bukkit.DyeColor;
 import org.bukkit.entity.Animals;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Sheep;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 
 /**
  * Визуальная часть системы пола без подмены модели.
  *
- * Важно: ванильный клиент Minecraft не позволяет серверному плагину назначить
- * отдельную PNG-текстуру конкретной корове, козе, свинье или курице. Поэтому
- * здесь намеренно нет ItemDisplay, PAPER, CustomModelData, невидимых животных
- * и других подмен модели.
+ * Для коров, свиней и куриц используются реальные ванильные варианты сущностей.
+ * Самец получает WARM-вариант, самка — TEMPERATE-вариант. Это меняет внешний вид
+ * непосредственно у настоящего моба и не создаёт ItemDisplay или дополнительные сущности.
  *
- * Ресурс-пак по-прежнему может загружаться ResourcePackManager, но сам выбор
- * текстуры для конкретной сущности требует клиентской системы вариантов
- * текстур. Без такой системы плагин не пытается создавать ложный визуальный
- * эффект. Для барана используется реальный ванильный признак — чёрный цвет.
+ * Reflection используется намеренно: AnimalFarm собирается против совместимого API и не
+ * должен переставать запускаться на ядре, где API вариантов отсутствует.
  */
 public final class AnimalVisualManager {
     private final AnimalFarmPlugin plugin;
@@ -30,46 +31,78 @@ public final class AnimalVisualManager {
         return plugin.getConfig().getBoolean("animal-genders.visuals.enabled", true);
     }
 
-    /**
-     * Применяет только безопасные встроенные ванильные признаки внешности.
-     * Никакие дополнительные сущности и модели не создаются.
-     */
     public void applyVisual(Animals animal) {
-        if (!enabled() || !genders.supported(animal)) {
+        if (!enabled() || !genders.supported(animal)) return;
+
+        AnimalGender gender = genders.getOrAssign(animal);
+
+        // Баран: встроенный и безопасный ванильный признак.
+        if (animal instanceof Sheep sheep) {
+            if (gender == AnimalGender.MALE) sheep.setColor(DyeColor.BLACK);
             return;
         }
 
-        if (animal instanceof Sheep sheep
-                && genders.getOrAssign(sheep) == AnimalGender.MALE) {
-            sheep.setColor(DyeColor.BLACK);
+        // В Minecraft 1.21.5+ корова, свинья и курица имеют реальные варианты.
+        // WARM используется для самца, TEMPERATE — для самки.
+        switch (animal.getType()) {
+            case COW, PIG, CHICKEN -> applyFarmVariant(animal, gender);
+            case GOAT -> {
+                // У козы нет встроенного ванильного texture-variant API.
+                // Пол продолжает показываться HUD/информацией без подмены модели.
+            }
+            default -> { }
         }
     }
 
-    /**
-     * Метод сохранён для совместимости с жизненным циклом плагина.
-     * В текстурном режиме нечего удалять: настоящий моб никогда не скрывается.
-     */
-    public void removeVisual(Animals animal) {
-        // Ничего не делать.
+    private void applyFarmVariant(Animals animal, AnimalGender gender) {
+        try {
+            Class<?> variantClass = Class.forName(animal.getClass().getInterfaces()[0].getName() + "$Variant");
+            Object variant = getVariantConstant(variantClass,
+                    gender == AnimalGender.MALE ? "WARM" : "TEMPERATE");
+            if (variant == null) return;
+
+            Method setVariant = findSetVariant(animal.getClass(), variantClass);
+            if (setVariant == null) return;
+            setVariant.invoke(animal, variant);
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            // Ядро не поддерживает этот вариант API. Плагин продолжает работать без текстурной подмены.
+        }
     }
 
-    /** Применяет безопасные визуальные признаки ко всем загруженным животным. */
+    private Object getVariantConstant(Class<?> variantClass, String name) {
+        try {
+            Field field = variantClass.getField(name);
+            return field.get(null);
+        } catch (ReflectiveOperationException exception) {
+            return null;
+        }
+    }
+
+    private Method findSetVariant(Class<?> entityClass, Class<?> variantClass) {
+        for (Method method : entityClass.getMethods()) {
+            if (!method.getName().equals("setVariant") || method.getParameterCount() != 1) continue;
+            if (method.getParameterTypes()[0].isAssignableFrom(variantClass)
+                    || variantClass.isAssignableFrom(method.getParameterTypes()[0])) {
+                return method;
+            }
+        }
+        return null;
+    }
+
+    public void removeVisual(Animals animal) {
+        // Никаких дочерних display-сущностей нет.
+    }
+
     public void refreshLoadedAnimals() {
         if (!enabled()) return;
-
         plugin.getServer().getWorlds().forEach(world -> {
-            world.getEntities().forEach(entity -> {
-                if (entity instanceof Animals animal) {
-                    applyVisual(animal);
-                }
-            });
+            for (Entity entity : world.getEntities()) {
+                if (entity instanceof Animals animal) applyVisual(animal);
+            }
         });
     }
 
-    /**
-     * В этом режиме нет дочерних display-сущностей, поэтому очищать нечего.
-     */
     public void shutdown() {
-        // Ничего не делать.
+        // Нечего удалять: внешний вид принадлежит настоящей сущности.
     }
 }
