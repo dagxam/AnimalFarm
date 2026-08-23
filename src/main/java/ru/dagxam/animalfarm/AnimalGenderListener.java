@@ -1,5 +1,6 @@
 package ru.dagxam.animalfarm;
 
+import org.bukkit.Chunk;
 import org.bukkit.entity.Ageable;
 import org.bukkit.entity.Animals;
 import org.bukkit.entity.Entity;
@@ -11,9 +12,10 @@ import org.bukkit.event.entity.EntityBreedEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.entity.SheepDyeWoolEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
+import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.inventory.EquipmentSlot;
 
-/** Назначает пол, контролирует пары и применяет визуальные признаки пола. */
+/** Назначает пол и применяет разрешённые варианты при любом появлении животных. */
 public final class AnimalGenderListener implements Listener {
     private final AnimalFarmPlugin plugin;
     private final AnimalGenderManager genders;
@@ -28,17 +30,27 @@ public final class AnimalGenderListener implements Listener {
         handleSpawn(event.getEntity());
     }
 
-    /** Дополнительная обработка сущностей, создаваемых при генерации мира и чанков. */
+    /** Обрабатывает обычный, естественный и программный спавн. */
     @EventHandler(ignoreCancelled = true)
     public void onEntitySpawn(EntitySpawnEvent event) {
         handleSpawn(event.getEntity());
     }
 
+    /**
+     * Ключевая дополнительная обработка генерации мира и новых чанков.
+     * Если животное появилось при генерации раньше/в обход события спавна,
+     * оно всё равно получает нужный пол и только разрешённый вариант.
+     */
+    @EventHandler
+    public void onChunkLoad(ChunkLoadEvent event) {
+        Chunk chunk = event.getChunk();
+        for (Entity entity : chunk.getEntities()) {
+            handleSpawn(entity);
+        }
+    }
+
     private void handleSpawn(Entity entity) {
         if (!(entity instanceof Animals animal) || !genders.supported(animal)) return;
-
-        // Для овец getOrAssign определяет пол по уже выбранному ванильному цвету:
-        // серая/чёрная = самец, остальные = самка.
         genders.assignRandomIfSupported(animal);
         plugin.visualManager().applyVisualAfterSpawn(animal);
     }
@@ -52,9 +64,9 @@ public final class AnimalGenderListener implements Listener {
         }
 
         if (event.getEntity() instanceof Animals baby && genders.supported(baby)) {
-            // У детёныша овцы пол также определяется его фактическим цветом шерсти.
-            genders.assignRandomIfSupported(baby);
-            plugin.visualManager().applyVisualAfterSpawn(baby);
+            // Детёныш обрабатывается той же системой, что и животное,
+            // с теми же строго разрешёнными вариантами.
+            handleSpawn(baby);
         }
     }
 
@@ -88,6 +100,7 @@ public final class AnimalGenderListener implements Listener {
     private String displayName(Animals animal, AnimalGender gender) {
         return switch (animal.getType()) {
             case COW -> gender == AnimalGender.MALE ? "Бык" : "Корова";
+            case MOOSHROOM -> "Корова";
             case SHEEP -> gender == AnimalGender.MALE ? "Баран" : "Овца";
             case GOAT -> gender == AnimalGender.MALE ? "Козёл" : "Коза";
             case PIG -> gender == AnimalGender.MALE ? "Хряк" : "Свинья";
