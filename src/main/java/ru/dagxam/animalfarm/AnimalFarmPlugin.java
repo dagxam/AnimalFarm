@@ -18,6 +18,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
     private FarmOwnershipManager ownershipManager;
     private AnimalGenderManager genderManager;
     private AnimalGenderHudManager genderHudManager;
+    private AnimalVisualManager visualManager;
     private ResourcePackManager resourcePackManager;
     private FarmProcessor farmProcessor;
     private FarmTaskScheduler taskScheduler;
@@ -25,38 +26,145 @@ public final class AnimalFarmPlugin extends JavaPlugin {
     private FishingManager fishingManager;
     private FarmHudManager hudManager;
 
-    @Override public void onEnable() { saveDefaultConfig(); loadManagers(); registerListeners(); registerCommand(); registerRecipes(); startTickTask(); startFarmTask(); genderHudManager.start(); }
-    @Override public void onDisable() { if (tickTask != null) tickTask.cancel(); if (taskScheduler != null) taskScheduler.stop(); if (genderHudManager != null) genderHudManager.stop(); if (farmObjectManager != null) farmObjectManager.clear(); if (areaAnalyzer != null) areaAnalyzer.clear(); }
+    @Override
+    public void onEnable() {
+        saveDefaultConfig();
+        loadManagers();
+        registerListeners();
+        registerCommand();
+        registerRecipes();
+        startTickTask();
+        startFarmTask();
+        genderHudManager.start();
+        visualManager.refreshLoadedAnimals();
+    }
+
+    @Override
+    public void onDisable() {
+        if (tickTask != null) tickTask.cancel();
+        if (taskScheduler != null) taskScheduler.stop();
+        if (genderHudManager != null) genderHudManager.stop();
+        if (visualManager != null) visualManager.shutdown();
+        if (farmObjectManager != null) farmObjectManager.clear();
+        if (areaAnalyzer != null) areaAnalyzer.clear();
+    }
 
     private void loadManagers() {
-        settings = new FarmSettings(getConfig()); areaAnalyzer = new FarmAreaAnalyzer(settings); farmObjectManager = new FarmObjectManager(this, areaAnalyzer);
-        ownershipManager = new FarmOwnershipManager(this); genderManager = new AnimalGenderManager(this); genderHudManager = new AnimalGenderHudManager(this, genderManager); resourcePackManager = new ResourcePackManager(this); farmObjectManager.registerLoaded();
-        farmProcessor = new FarmProcessor(this, settings); taskScheduler = new FarmTaskScheduler(this); milkManager = new MilkManager(this, settings);
-        fishingManager = new FishingManager(this); hudManager = new FarmHudManager(this);
+        settings = new FarmSettings(getConfig());
+        areaAnalyzer = new FarmAreaAnalyzer(settings);
+        farmObjectManager = new FarmObjectManager(this, areaAnalyzer);
+        ownershipManager = new FarmOwnershipManager(this);
+        genderManager = new AnimalGenderManager(this);
+        genderHudManager = new AnimalGenderHudManager(this, genderManager);
+        visualManager = new AnimalVisualManager(this, genderManager);
+        resourcePackManager = new ResourcePackManager(this);
+        farmObjectManager.registerLoaded();
+        farmProcessor = new FarmProcessor(this, settings);
+        taskScheduler = new FarmTaskScheduler(this);
+        milkManager = new MilkManager(this, settings);
+        fishingManager = new FishingManager(this);
+        hudManager = new FarmHudManager(this);
     }
+
     private void registerListeners() {
         var pm = getServer().getPluginManager();
-        pm.registerEvents(farmObjectManager, this); pm.registerEvents(new DropManager(this), this); pm.registerEvents(milkManager, this);
-        pm.registerEvents(fishingManager, this); pm.registerEvents(hudManager, this); pm.registerEvents(new FreshFishReleaseManager(this), this);
-        pm.registerEvents(new AquariumFishHarvestManager(this), this); pm.registerEvents(new AnimalGenderListener(this, genderManager), this); pm.registerEvents(resourcePackManager, this);
+        pm.registerEvents(farmObjectManager, this);
+        pm.registerEvents(new DropManager(this), this);
+        pm.registerEvents(milkManager, this);
+        pm.registerEvents(fishingManager, this);
+        pm.registerEvents(hudManager, this);
+        pm.registerEvents(new FreshFishReleaseManager(this), this);
+        pm.registerEvents(new AquariumFishHarvestManager(this), this);
+        pm.registerEvents(new AnimalGenderListener(this, genderManager), this);
+        pm.registerEvents(visualManager, this);
+        pm.registerEvents(resourcePackManager, this);
     }
-    private void registerCommand() { PluginCommand command = getCommand("animalfarm"); if (command == null) { getLogger().warning("Команда /animalfarm не найдена в plugin.yml"); return; } AnimalFarmCommand executor = new AnimalFarmCommand(this); command.setExecutor(executor); command.setTabCompleter(executor); }
-    public void reloadPluginConfig() { reloadConfig(); settings = new FarmSettings(getConfig()); areaAnalyzer = new FarmAreaAnalyzer(settings); farmObjectManager.setAreaAnalyzer(areaAnalyzer); farmObjectManager.clear(); farmObjectManager.registerLoaded(); farmProcessor = new FarmProcessor(this, settings); milkManager.setSettings(settings); restartFarmTask(); }
+
+    private void registerCommand() {
+        PluginCommand command = getCommand("animalfarm");
+        if (command == null) {
+            getLogger().warning("Команда /animalfarm не найдена в plugin.yml");
+            return;
+        }
+        AnimalFarmCommand executor = new AnimalFarmCommand(this);
+        command.setExecutor(executor);
+        command.setTabCompleter(executor);
+    }
+
+    public void reloadPluginConfig() {
+        reloadConfig();
+        settings = new FarmSettings(getConfig());
+        areaAnalyzer = new FarmAreaAnalyzer(settings);
+        farmObjectManager.setAreaAnalyzer(areaAnalyzer);
+        farmObjectManager.clear();
+        farmObjectManager.registerLoaded();
+        farmProcessor = new FarmProcessor(this, settings);
+        milkManager.setSettings(settings);
+        visualManager.refreshLoadedAnimals();
+        restartFarmTask();
+    }
+
     public FarmSettings settings() { return settings; }
     public FarmObjectManager farmObjectManager() { return farmObjectManager; }
     public FarmOwnershipManager ownershipManager() { return ownershipManager; }
     public AnimalGenderManager genderManager() { return genderManager; }
+    public AnimalVisualManager visualManager() { return visualManager; }
     public String message(String key) { return org.bukkit.ChatColor.translateAlternateColorCodes('&', getConfig().getString("messages." + key, "")); }
     public ItemStack createFeederItem() { return createTaggedItem("§6Кормушка", "feeder_item"); }
     public ItemStack createAquariumShelfItem() { return createTaggedItem("§bАквариумная кормушка", "aquarium_shelf_item"); }
-    private ItemStack createTaggedItem(String name, String keyName) { ItemStack item = new ItemStack(Material.BARREL); ItemMeta meta = item.getItemMeta(); if (meta != null) { meta.setDisplayName(name); meta.getPersistentDataContainer().set(new NamespacedKey(this, keyName), org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1); item.setItemMeta(meta); } return item; }
-    private void registerRecipes() {
-        NamespacedKey feederKey = new NamespacedKey(this, "feeder"); getServer().removeRecipe(feederKey); ShapedRecipe feeder = new ShapedRecipe(feederKey, createFeederItem()); feeder.shape("BB", "BB"); feeder.setIngredient('B', Material.BARREL); getServer().addRecipe(feeder);
-        registerFishRecipe("aquarium_shelf_cod", Material.COD); registerFishRecipe("aquarium_shelf_salmon", Material.SALMON); registerFishRecipe("aquarium_shelf_tropical", Material.TROPICAL_FISH); registerFishRecipe("aquarium_shelf_pufferfish", Material.PUFFERFISH);
+
+    private ItemStack createTaggedItem(String name, String keyName) {
+        ItemStack item = new ItemStack(Material.BARREL);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(name);
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, keyName), org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
+            item.setItemMeta(meta);
+        }
+        return item;
     }
-    private void registerFishRecipe(String keyName, Material fish) { NamespacedKey key = new NamespacedKey(this, keyName); getServer().removeRecipe(key); ShapedRecipe recipe = new ShapedRecipe(key, createAquariumShelfItem()); recipe.shape("FF", "FF"); recipe.setIngredient('F', fish); getServer().addRecipe(recipe); }
-    private void startTickTask() { tickTask = getServer().getScheduler().runTaskTimer(this, () -> serverTick++, 1L, 1L); }
-    private void startFarmTask() { taskScheduler.startFarmTask(this::processFarmObjects, settings.feederCheckIntervalTicks()); }
-    private void restartFarmTask() { taskScheduler.stop(); startFarmTask(); }
-    private void processFarmObjects() { for (FarmObjectKey key : farmObjectManager.objects()) { var location = key.location(getServer()); if (location.getWorld() == null) continue; FarmObjectType type = farmObjectManager.typeOf(location.getBlock()); if (type != null) farmProcessor.process(key, type, serverTick); } }
+
+    private void registerRecipes() {
+        NamespacedKey feederKey = new NamespacedKey(this, "feeder");
+        getServer().removeRecipe(feederKey);
+        ShapedRecipe feeder = new ShapedRecipe(feederKey, createFeederItem());
+        feeder.shape("BB", "BB");
+        feeder.setIngredient('B', Material.BARREL);
+        getServer().addRecipe(feeder);
+        registerFishRecipe("aquarium_shelf_cod", Material.COD);
+        registerFishRecipe("aquarium_shelf_salmon", Material.SALMON);
+        registerFishRecipe("aquarium_shelf_tropical", Material.TROPICAL_FISH);
+        registerFishRecipe("aquarium_shelf_pufferfish", Material.PUFFERFISH);
+    }
+
+    private void registerFishRecipe(String keyName, Material fish) {
+        NamespacedKey key = new NamespacedKey(this, keyName);
+        getServer().removeRecipe(key);
+        ShapedRecipe recipe = new ShapedRecipe(key, createAquariumShelfItem());
+        recipe.shape("FF", "FF");
+        recipe.setIngredient('F', fish);
+        getServer().addRecipe(recipe);
+    }
+
+    private void startTickTask() {
+        tickTask = getServer().getScheduler().runTaskTimer(this, () -> serverTick++, 1L, 1L);
+    }
+
+    private void startFarmTask() {
+        taskScheduler.startFarmTask(this::processFarmObjects, settings.feederCheckIntervalTicks());
+    }
+
+    private void restartFarmTask() {
+        taskScheduler.stop();
+        startFarmTask();
+    }
+
+    private void processFarmObjects() {
+        for (FarmObjectKey key : farmObjectManager.objects()) {
+            var location = key.location(getServer());
+            if (location.getWorld() == null) continue;
+            FarmObjectType type = farmObjectManager.typeOf(location.getBlock());
+            if (type != null) farmProcessor.process(key, type, serverTick);
+        }
+    }
 }
