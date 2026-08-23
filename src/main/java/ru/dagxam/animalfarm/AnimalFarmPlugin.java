@@ -9,6 +9,12 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
+/**
+ * Основной класс AnimalFarm.
+ *
+ * Игровая логика плагина строится на стандартном Bukkit API (org.bukkit.*).
+ * Целевой сервер — Paper, но плагин не зависит от Paper- или Purpur-специфичных API.
+ */
 public final class AnimalFarmPlugin extends JavaPlugin {
     private long serverTick;
     private BukkitTask tickTask;
@@ -28,11 +34,6 @@ public final class AnimalFarmPlugin extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        if (!verifyPurpurRuntime()) {
-            getServer().getPluginManager().disablePlugin(this);
-            return;
-        }
-
         saveDefaultConfig();
         loadManagers();
         registerListeners();
@@ -43,7 +44,8 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         genderHudManager.start();
         visualManager.refreshLoadedAnimals();
 
-        getLogger().info("AnimalFarm запущен в режиме Purpur API: " + getServer().getBukkitVersion());
+        getLogger().info("AnimalFarm запущен. API: Bukkit, ядро: "
+                + getServer().getName() + " (" + getServer().getBukkitVersion() + ")");
     }
 
     @Override
@@ -54,17 +56,6 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         if (visualManager != null) visualManager.shutdown();
         if (farmObjectManager != null) farmObjectManager.clear();
         if (areaAnalyzer != null) areaAnalyzer.clear();
-    }
-
-    private boolean verifyPurpurRuntime() {
-        String serverName = getServer().getName();
-        if (serverName != null && serverName.toLowerCase(java.util.Locale.ROOT).contains("purpur")) {
-            return true;
-        }
-
-        getLogger().severe("AnimalFarm настроен для работы на Purpur. Обнаружено ядро: " + serverName);
-        getLogger().severe("Установите Purpur совместимой версии и перезапустите сервер.");
-        return false;
     }
 
     private void loadManagers() {
