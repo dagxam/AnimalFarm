@@ -76,7 +76,6 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         pm.registerEvents(new FreshFishReleaseManager(this), this);
         pm.registerEvents(new AquariumFishHarvestManager(this), this);
         pm.registerEvents(new AnimalGenderListener(this, genderManager), this);
-        pm.registerEvents(visualManager, this);
         pm.registerEvents(resourcePackManager, this);
     }
 
