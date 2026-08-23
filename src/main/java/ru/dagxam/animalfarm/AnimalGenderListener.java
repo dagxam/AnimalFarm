@@ -1,6 +1,5 @@
 package ru.dagxam.animalfarm;
 
-import org.bukkit.DyeColor;
 import org.bukkit.entity.Ageable;
 import org.bukkit.entity.Animals;
 import org.bukkit.entity.Entity;
@@ -29,10 +28,7 @@ public final class AnimalGenderListener implements Listener {
         handleSpawn(event.getEntity());
     }
 
-    /**
-     * Дополнительная точка обработки всех новых сущностей. Нужна для естественного
-     * спавна и генерации мира/чанков, где тип события может отличаться от ожидаемого.
-     */
+    /** Дополнительная обработка сущностей, создаваемых при генерации мира и чанков. */
     @EventHandler(ignoreCancelled = true)
     public void onEntitySpawn(EntitySpawnEvent event) {
         handleSpawn(event.getEntity());
@@ -41,12 +37,9 @@ public final class AnimalGenderListener implements Listener {
     private void handleSpawn(Entity entity) {
         if (!(entity instanceof Animals animal) || !genders.supported(animal)) return;
 
-        // Пол назначается каждому новому животному случайно и не зависит от биома.
+        // Для овец getOrAssign определяет пол по уже выбранному ванильному цвету:
+        // серая/чёрная = самец, остальные = самка.
         genders.assignRandomIfSupported(animal);
-        applySheepGender(animal);
-
-        // После завершения ванильной инициализации варианта дополнительно применяем
-        // наш вариант пола на следующем тике и ещё раз с небольшой задержкой.
         plugin.visualManager().applyVisualAfterSpawn(animal);
     }
 
@@ -57,9 +50,10 @@ public final class AnimalGenderListener implements Listener {
             event.setCancelled(true);
             return;
         }
+
         if (event.getEntity() instanceof Animals baby && genders.supported(baby)) {
+            // У детёныша овцы пол также определяется его фактическим цветом шерсти.
             genders.assignRandomIfSupported(baby);
-            applySheepGender(baby);
             plugin.visualManager().applyVisualAfterSpawn(baby);
         }
     }
@@ -67,9 +61,9 @@ public final class AnimalGenderListener implements Listener {
     @EventHandler(ignoreCancelled = true)
     public void onSheepDye(SheepDyeWoolEvent event) {
         Sheep sheep = event.getEntity();
+        // Самца нельзя перекрасить, чтобы чёрный/серый признак пола не потерялся.
         if (genders.supported(sheep) && genders.getOrAssign(sheep) == AnimalGender.MALE) {
             event.setCancelled(true);
-            sheep.setColor(DyeColor.BLACK);
         }
     }
 
@@ -81,6 +75,7 @@ public final class AnimalGenderListener implements Listener {
         if (!(entity instanceof Animals animal) || !genders.supported(animal)) return;
         if (event.getPlayer().isSneaking()) return;
         if (event.getPlayer().getInventory().getItemInMainHand().getType().name().endsWith("BUCKET")) return;
+
         AnimalGender gender = genders.getOrAssign(animal);
         String species = displayName(animal, gender);
         String sex = gender == AnimalGender.MALE ? "Мужской" : "Женский";
@@ -88,13 +83,6 @@ public final class AnimalGenderListener implements Listener {
         event.getPlayer().sendMessage(plugin.message("prefix") + "&fЖивотное: &e" + species);
         event.getPlayer().sendMessage("&fПол: &e" + sex);
         event.getPlayer().sendMessage("&fВозраст: &e" + age);
-    }
-
-    private void applySheepGender(Animals animal) {
-        if (animal instanceof Sheep sheep && genders.supported(sheep)
-                && genders.getOrAssign(sheep) == AnimalGender.MALE) {
-            sheep.setColor(DyeColor.BLACK);
-        }
     }
 
     private String displayName(Animals animal, AnimalGender gender) {
