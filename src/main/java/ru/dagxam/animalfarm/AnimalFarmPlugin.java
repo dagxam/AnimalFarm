@@ -4,7 +4,6 @@ import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.RecipeChoice;
 import org.bukkit.inventory.ShapedRecipe;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -18,18 +17,19 @@ public final class AnimalFarmPlugin extends JavaPlugin {
     private FarmObjectManager farmObjectManager;
     private FarmOwnershipManager ownershipManager;
     private AnimalGenderManager genderManager;
+    private AnimalGenderHudManager genderHudManager;
     private FarmProcessor farmProcessor;
     private FarmTaskScheduler taskScheduler;
     private MilkManager milkManager;
     private FishingManager fishingManager;
     private FarmHudManager hudManager;
 
-    @Override public void onEnable() { saveDefaultConfig(); loadManagers(); registerListeners(); registerCommand(); registerRecipes(); startTickTask(); startFarmTask(); }
-    @Override public void onDisable() { if (tickTask != null) tickTask.cancel(); if (taskScheduler != null) taskScheduler.stop(); if (farmObjectManager != null) farmObjectManager.clear(); if (areaAnalyzer != null) areaAnalyzer.clear(); }
+    @Override public void onEnable() { saveDefaultConfig(); loadManagers(); registerListeners(); registerCommand(); registerRecipes(); startTickTask(); startFarmTask(); genderHudManager.start(); }
+    @Override public void onDisable() { if (tickTask != null) tickTask.cancel(); if (taskScheduler != null) taskScheduler.stop(); if (genderHudManager != null) genderHudManager.stop(); if (farmObjectManager != null) farmObjectManager.clear(); if (areaAnalyzer != null) areaAnalyzer.clear(); }
 
     private void loadManagers() {
         settings = new FarmSettings(getConfig()); areaAnalyzer = new FarmAreaAnalyzer(settings); farmObjectManager = new FarmObjectManager(this, areaAnalyzer);
-        ownershipManager = new FarmOwnershipManager(this); genderManager = new AnimalGenderManager(this); farmObjectManager.registerLoaded();
+        ownershipManager = new FarmOwnershipManager(this); genderManager = new AnimalGenderManager(this); genderHudManager = new AnimalGenderHudManager(this, genderManager); farmObjectManager.registerLoaded();
         farmProcessor = new FarmProcessor(this, settings); taskScheduler = new FarmTaskScheduler(this); milkManager = new MilkManager(this, settings);
         fishingManager = new FishingManager(this); hudManager = new FarmHudManager(this);
     }
