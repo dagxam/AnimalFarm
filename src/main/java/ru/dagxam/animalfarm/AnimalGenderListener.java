@@ -1,16 +1,19 @@
 package ru.dagxam.animalfarm;
 
+import org.bukkit.DyeColor;
 import org.bukkit.entity.Ageable;
 import org.bukkit.entity.Animals;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.Sheep;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityBreedEvent;
+import org.bukkit.event.entity.SheepDyeWoolEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.inventory.EquipmentSlot;
 
-/** Назначает пол при появлении, контролирует пары и показывает информацию о животном. */
+/** Назначает пол, контролирует пары и применяет базные визуальные признаки пола. */
 public final class AnimalGenderListener implements Listener {
     private final AnimalFarmPlugin plugin;
     private final AnimalGenderManager genders;
@@ -22,14 +25,33 @@ public final class AnimalGenderListener implements Listener {
 
     @EventHandler
     public void onSpawn(CreatureSpawnEvent event) {
-        if (event.getEntity() instanceof Animals animal) genders.assignRandomIfSupported(animal);
+        if (event.getEntity() instanceof Animals animal) {
+            genders.assignRandomIfSupported(animal);
+            applyVisualGender(animal);
+        }
     }
 
     @EventHandler(ignoreCancelled = true)
     public void onBreed(EntityBreedEvent event) {
         if (!(event.getMother() instanceof Animals mother) || !(event.getFather() instanceof Animals father)) return;
-        if (!genders.canBreed(mother, father)) { event.setCancelled(true); return; }
-        if (event.getEntity() instanceof Animals baby) genders.assignRandomIfSupported(baby);
+        if (!genders.canBreed(mother, father)) {
+            event.setCancelled(true);
+            return;
+        }
+        if (event.getEntity() instanceof Animals baby) {
+            genders.assignRandomIfSupported(baby);
+            applyVisualGender(baby);
+        }
+    }
+
+    /** Баран всегда остаётся чёрным, чтобы цвет был постоянным признаком самца. */
+    @EventHandler(ignoreCancelled = true)
+    public void onSheepDye(SheepDyeWoolEvent event) {
+        Sheep sheep = event.getEntity();
+        if (genders.supported(sheep) && genders.getOrAssign(sheep) == AnimalGender.MALE) {
+            event.setCancelled(true);
+            sheep.setColor(DyeColor.BLACK);
+        }
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -39,17 +61,21 @@ public final class AnimalGenderListener implements Listener {
         Entity entity = event.getRightClicked();
         if (!(entity instanceof Animals animal) || !genders.supported(animal)) return;
         if (event.getPlayer().isSneaking()) return;
-        // Не мешаем доению, кормлению малышей и специальному ведру.
         if (event.getPlayer().getInventory().getItemInMainHand().getType().name().endsWith("BUCKET")) return;
         AnimalGender gender = genders.getOrAssign(animal);
         String species = displayName(animal, gender);
         String sex = gender == AnimalGender.MALE ? "Мужской" : "Женский";
-        String age = animal instanceof Ageable ageable && !ageable.isAdult()
-                ? (gender == AnimalGender.MALE ? "Детёныш" : "Детёныш")
-                : adultAge(gender);
+        String age = animal instanceof Ageable ageable && !ageable.isAdult() ? "Детёныш" : adultAge(gender);
         event.getPlayer().sendMessage(plugin.message("prefix") + "&fЖивотное: &e" + species);
         event.getPlayer().sendMessage("&fПол: &e" + sex);
         event.getPlayer().sendMessage("&fВозраст: &e" + age);
+    }
+
+    private void applyVisualGender(Animals animal) {
+        if (animal instanceof Sheep sheep && genders.supported(sheep)
+                && genders.getOrAssign(sheep) == AnimalGender.MALE) {
+            sheep.setColor(DyeColor.BLACK);
+        }
     }
 
     private String displayName(Animals animal, AnimalGender gender) {
@@ -63,5 +89,7 @@ public final class AnimalGenderListener implements Listener {
         };
     }
 
-    private String adultAge(AnimalGender gender) { return gender == AnimalGender.MALE ? "Взрослый" : "Взрослая"; }
+    private String adultAge(AnimalGender gender) {
+        return gender == AnimalGender.MALE ? "Взрослый" : "Взрослая";
+    }
 }
