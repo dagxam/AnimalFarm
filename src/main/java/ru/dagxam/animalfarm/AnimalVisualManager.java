@@ -14,11 +14,13 @@ import java.lang.reflect.Method;
  * Используются только встроенные ванильные варианты:
  * - самец-корова (бык) получает WARM-вариант коровы;
  * - самец-свинья (хряк) получает WARM-вариант свиньи;
+ * - самец-курица (петух) получает COLD-вариант курицы;
  * - самец-овца (баран) получает чёрную шерсть.
  *
- * Самки используют обычные варианты TEMPERATE, поэтому корова и свинья остаются
- * визуально стандартными. Вариант применяется и взрослым, и детёнышам сразу
- * после назначения пола.
+ * Самки используют обычные выбранные варианты. Для курицы это WARM-вариант,
+ * поэтому петухи и цыплята-петухи используют chicken_cold/chicken_cold_baby,
+ * а куры и цыплята-самки используют chicken_warm/chicken_warm_baby.
+ * Вариант применяется и взрослым, и детёнышам сразу после назначения пола.
  */
 public final class AnimalVisualManager {
     private final AnimalFarmPlugin plugin;
@@ -48,24 +50,33 @@ public final class AnimalVisualManager {
         }
 
         if (animal.getType().name().equals("COW")) {
-            applyVariant(animal, "org.bukkit.entity.Cow$Variant", gender);
+            applyVariant(animal, "org.bukkit.entity.Cow$Variant", gender, "WARM", "TEMPERATE");
             return;
         }
 
         if (animal.getType().name().equals("PIG")) {
-            applyVariant(animal, "org.bukkit.entity.Pig$Variant", gender);
+            applyVariant(animal, "org.bukkit.entity.Pig$Variant", gender, "WARM", "TEMPERATE");
+            return;
+        }
+
+        if (animal.getType().name().equals("CHICKEN")) {
+            // Петух — COLD, курица — WARM. Детские текстуры выбираются Minecraft
+            // автоматически из варианта и возраста сущности.
+            applyVariant(animal, "org.bukkit.entity.Chicken$Variant", gender, "COLD", "WARM");
         }
     }
 
-    private void applyVariant(Animals animal, String variantClassName, AnimalGender gender) {
+    private void applyVariant(
+            Animals animal,
+            String variantClassName,
+            AnimalGender gender,
+            String maleVariantName,
+            String femaleVariantName
+    ) {
         try {
             Class<?> variantClass = Class.forName(variantClassName);
-            // WARM — коричневый ванильный вариант для самцов.
-            // TEMPERATE — обычный розовый вариант для самок.
-            Object variant = getVariantConstant(
-                    variantClass,
-                    gender == AnimalGender.MALE ? "WARM" : "TEMPERATE"
-            );
+            String variantName = gender == AnimalGender.MALE ? maleVariantName : femaleVariantName;
+            Object variant = getVariantConstant(variantClass, variantName);
             if (variant == null) return;
 
             Method setVariant = findSetVariant(animal.getClass(), variantClass);
