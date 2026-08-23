@@ -10,8 +10,7 @@
     <packaging>jar</packaging>
 
     <properties>
-        <!-- Плагин компилируется против стандартного Spigot/Bukkit API.
-             В коде не используются Paper-, Purpur- или Pufferfish-специфичные API. -->
+        <!-- Плагин использует стандартный Bukkit/Spigot API. -->
         <maven.compiler.release>26</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
@@ -42,23 +41,6 @@
                     <release>26</release>
                     <encoding>UTF-8</encoding>
                 </configuration>
-            </plugin>
-
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
-                <version>3.6.0</version>
-                <executions>
-                    <execution>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>shade</goal>
-                        </goals>
-                        <configuration>
-                            <createDependencyReducedPom>false</createDependencyReducedPom>
-                        </configuration>
-                    </execution>
-                </executions>
             </plugin>
         </plugins>
     </build>
