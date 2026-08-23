@@ -28,7 +28,8 @@ public final class AnimalGenderManager {
         if (!enabled()) return false;
         String key = animal.getType().name().toLowerCase(Locale.ROOT);
         return switch (animal.getType()) {
-            case COW, SHEEP, GOAT, PIG, CHICKEN -> plugin.getConfig().getBoolean("animal-genders.animals." + key, true);
+            case COW, MOOSHROOM, SHEEP, GOAT, PIG, CHICKEN ->
+                    plugin.getConfig().getBoolean("animal-genders.animals." + key, true);
             default -> false;
         };
     }
@@ -47,12 +48,15 @@ public final class AnimalGenderManager {
 
         AnimalGender gender;
         if (animal instanceof Sheep sheep) {
-            // У овец пол определяется естественным цветом шерсти.
-            // Чёрная и серая — самцы, все остальные цвета — самки.
+            // Чёрная и серая (тёмно-серая) овца — баран.
+            // Все остальные цвета — овца.
             DyeColor color = sheep.getColor();
             gender = (color == DyeColor.BLACK || color == DyeColor.GRAY)
                     ? AnimalGender.MALE
                     : AnimalGender.FEMALE;
+        } else if (animal.getType().name().equals("MOOSHROOM")) {
+            // mooshroom_brown относится к женскому варианту.
+            gender = AnimalGender.FEMALE;
         } else {
             gender = randomGender();
         }
@@ -82,7 +86,9 @@ public final class AnimalGenderManager {
         int male = clamp(plugin.getConfig().getInt("animal-genders.male-chance", 50));
         int female = clamp(plugin.getConfig().getInt("animal-genders.female-chance", 50));
         int total = male + female;
-        if (total <= 0) return ThreadLocalRandom.current().nextBoolean() ? AnimalGender.MALE : AnimalGender.FEMALE;
+        if (total <= 0) {
+            return ThreadLocalRandom.current().nextBoolean() ? AnimalGender.MALE : AnimalGender.FEMALE;
+        }
         return ThreadLocalRandom.current().nextInt(total) < male ? AnimalGender.MALE : AnimalGender.FEMALE;
     }
 
