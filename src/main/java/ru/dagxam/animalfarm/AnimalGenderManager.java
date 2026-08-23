@@ -1,9 +1,9 @@
 package ru.dagxam.animalfarm;
 
+import org.bukkit.DyeColor;
 import org.bukkit.NamespacedKey;
-import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Animals;
-import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Sheep;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 
@@ -35,20 +35,40 @@ public final class AnimalGenderManager {
 
     public AnimalGender getOrAssign(Animals animal) {
         if (!supported(animal)) return AnimalGender.FEMALE;
+
         PersistentDataContainer pdc = animal.getPersistentDataContainer();
         String raw = pdc.get(genderKey, PersistentDataType.STRING);
         if (raw != null) {
-            try { return AnimalGender.valueOf(raw); } catch (IllegalArgumentException ignored) { }
+            try {
+                return AnimalGender.valueOf(raw);
+            } catch (IllegalArgumentException ignored) {
+            }
         }
-        AnimalGender gender = randomGender();
+
+        AnimalGender gender;
+        if (animal instanceof Sheep sheep) {
+            // У овец пол определяется естественным цветом шерсти.
+            // Чёрная и серая — самцы, все остальные цвета — самки.
+            DyeColor color = sheep.getColor();
+            gender = (color == DyeColor.BLACK || color == DyeColor.GRAY)
+                    ? AnimalGender.MALE
+                    : AnimalGender.FEMALE;
+        } else {
+            gender = randomGender();
+        }
+
         pdc.set(genderKey, PersistentDataType.STRING, gender.name());
         return gender;
     }
 
-    public void assignRandomIfSupported(Animals animal) { getOrAssign(animal); }
+    public void assignRandomIfSupported(Animals animal) {
+        getOrAssign(animal);
+    }
 
     public boolean canBreed(Animals first, Animals second) {
-        if (!plugin.getConfig().getBoolean("animal-genders.breeding.require-male-and-female", true)) return first.getType() == second.getType();
+        if (!plugin.getConfig().getBoolean("animal-genders.breeding.require-male-and-female", true)) {
+            return first.getType() == second.getType();
+        }
         if (!supported(first) || !supported(second)) return first.getType() == second.getType();
         return first.getType() == second.getType() && getOrAssign(first) != getOrAssign(second);
     }
@@ -66,5 +86,7 @@ public final class AnimalGenderManager {
         return ThreadLocalRandom.current().nextInt(total) < male ? AnimalGender.MALE : AnimalGender.FEMALE;
     }
 
-    private int clamp(int value) { return Math.max(0, Math.min(100, value)); }
+    private int clamp(int value) {
+        return Math.max(0, Math.min(100, value));
+    }
 }
