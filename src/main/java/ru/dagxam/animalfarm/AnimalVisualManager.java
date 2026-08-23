@@ -7,8 +7,8 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 /**
- * Визуальная часть системы пола без моделей, подмены сущностей и привязки к ядру.
- * Используются только встроенные варианты Minecraft.
+ * Применяет только разрешённые пользователем встроенные варианты Minecraft.
+ * Правило одинаково для взрослых, детёнышей, естественного спавна и генерации чанков.
  */
 public final class AnimalVisualManager {
     private final AnimalFarmPlugin plugin;
@@ -24,13 +24,13 @@ public final class AnimalVisualManager {
     }
 
     /**
-     * Применяет внешний вид после завершения обычного спавна.
-     * Повторная установка нужна, чтобы итоговый биомный вариант ванили не
-     * перезаписал вариант, выбранный системой пола.
+     * Повторяем установку после завершения ванильной генерации сущности,
+     * чтобы биом или генератор чанка не вернул собственный вариант обратно.
      */
     public void applyVisualAfterSpawn(Animals animal) {
         plugin.getServer().getScheduler().runTask(plugin, () -> applyIfStillValid(animal));
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> applyIfStillValid(animal), 2L);
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> applyIfStillValid(animal), 5L);
     }
 
     private void applyIfStillValid(Animals animal) {
@@ -44,50 +44,58 @@ public final class AnimalVisualManager {
 
         AnimalGender gender = genders.getOrAssign(animal);
 
-        if (animal instanceof org.bukkit.entity.Sheep) {
-            // Цвет овцы не меняем: он и есть визуальный признак пола.
-            // Чёрная и серая овца = баран, остальные цвета = овца.
-            return;
+        switch (animal.getType()) {
+            case COW -> applyCowVariant(animal, gender);
+            case MOOSHROOM -> applyVariantByName(animal, "org.bukkit.entity.MushroomCow$Variant", "BROWN");
+            case SHEEP -> {
+                // Чёрная/серая = баран, остальные цвета = овца.
+                // Цвет специально не меняем, чтобы не ломать правило пола.
+            }
+            case PIG -> applyPigVariant(animal, gender);
+            case CHICKEN -> applyChickenVariant(animal, gender);
+            default -> {
+            }
         }
+    }
 
-        if (animal.getType().name().equals("COW")) {
-            // Бык — коричневый встроенный вариант, корова — обычный вариант.
-            applyVariant(animal, "org.bukkit.entity.Cow$Variant", gender, "WARM", "TEMPERATE");
-            return;
+    private void applyCowVariant(Animals animal, AnimalGender gender) {
+        String variantName;
+        if (gender == AnimalGender.MALE) {
+            // Бык: cow_warm или cow_cold.
+            variantName = choose(animal, "WARM", "COLD");
+        } else {
+            // Корова: cow_temperate.
+            variantName = "TEMPERATE";
         }
+        applyVariantByName(animal, "org.bukkit.entity.Cow$Variant", variantName);
+    }
 
-        if (animal.getType().name().equals("PIG")) {
-            // Хряк — коричневый встроенный вариант, свинья — обычный розовый вариант.
-            applyVariant(animal, "org.bukkit.entity.Pig$Variant", gender, "WARM", "TEMPERATE");
-            return;
+    private void applyPigVariant(Animals animal, AnimalGender gender) {
+        String variantName;
+        if (gender == AnimalGender.MALE) {
+            // Хряк: pig_warm или pig_cold.
+            variantName = choose(animal, "WARM", "COLD");
+        } else {
+            // Свинья: pig_cold согласно заданному правилу.
+            variantName = "COLD";
         }
-
-        if (animal.getType().name().equals("CHICKEN")) {
-            applyChickenVariant(animal, gender);
-        }
+        applyVariantByName(animal, "org.bukkit.entity.Pig$Variant", variantName);
     }
 
     private void applyChickenVariant(Animals animal, AnimalGender gender) {
         String variantName;
         if (gender == AnimalGender.MALE) {
+            // Петух: chicken_cold.
             variantName = "COLD";
         } else {
-            variantName = Math.floorMod(animal.getUniqueId().hashCode(), 2) == 0
-                    ? "WARM"
-                    : "TEMPERATE";
+            // Курица: chicken_warm или chicken_temperate.
+            variantName = choose(animal, "WARM", "TEMPERATE");
         }
         applyVariantByName(animal, "org.bukkit.entity.Chicken$Variant", variantName);
     }
 
-    private void applyVariant(
-            Animals animal,
-            String variantClassName,
-            AnimalGender gender,
-            String maleVariantName,
-            String femaleVariantName
-    ) {
-        String variantName = gender == AnimalGender.MALE ? maleVariantName : femaleVariantName;
-        applyVariantByName(animal, variantClassName, variantName);
+    private String choose(Animals animal, String first, String second) {
+        return Math.floorMod(animal.getUniqueId().hashCode(), 2) == 0 ? first : second;
     }
 
     private void applyVariantByName(Animals animal, String variantClassName, String variantName) {
