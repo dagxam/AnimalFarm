@@ -1,4 +1,4 @@
-name: Build AnimalFarm
+name: Build AnimalFarm for Purpur
 
 on:
   push:
@@ -9,6 +9,7 @@ on:
 
 jobs:
   build:
+    name: Maven build against Purpur API
     runs-on: ubuntu-latest
 
     steps:
@@ -25,12 +26,12 @@ jobs:
       - name: Проверить Java
         run: java -version
 
-      - name: Собрать плагин
-        run: mvn -B clean package
+      - name: Собрать плагин против Purpur API
+        run: mvn -B -U clean package
 
       - name: Загрузить JAR
         uses: actions/upload-artifact@v4
         with:
-          name: AnimalFarm
+          name: AnimalFarm-Purpur
           path: target/*.jar
           if-no-files-found: error
