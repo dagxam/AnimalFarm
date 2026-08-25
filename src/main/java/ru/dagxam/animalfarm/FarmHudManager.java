@@ -17,145 +17,98 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/** HUD фермы с единым scheduler вместо обработки каждого PlayerMoveEvent. */
+/** HUD фермы пакетно проверяет игроков и не зависит от PlayerMoveEvent. */
 public final class FarmHudManager implements Listener {
     private final AnimalFarmPlugin plugin;
     private final Map<UUID, String> lastTarget = new HashMap<>();
     private final Map<UUID, String> lastMessage = new HashMap<>();
     private BukkitTask task;
+    private int cursor;
 
-    public FarmHudManager(AnimalFarmPlugin plugin) {
-        this.plugin = plugin;
-    }
+    public FarmHudManager(AnimalFarmPlugin plugin) { this.plugin = plugin; }
 
     public void start() {
-        if (task != null) {
-            return;
-        }
+        if (task != null) return;
         long interval = Math.max(5L, plugin.getConfig().getLong("hud.update-interval-ticks", 10L));
-        task = plugin.getServer().getScheduler().runTaskTimer(plugin, this::updateAll, interval, interval);
+        task = plugin.getServer().getScheduler().runTaskTimer(plugin, this::updateBatch, interval, interval);
     }
 
     public void stop() {
-        if (task != null) {
-            task.cancel();
-            task = null;
-        }
+        if (task != null) { task.cancel(); task = null; }
+        cursor = 0;
         lastTarget.clear();
         lastMessage.clear();
     }
 
-    private void updateAll() {
-        if (!plugin.getConfig().getBoolean("hud.enabled", true)) {
-            return;
+    private void updateBatch() {
+        if (!plugin.getConfig().getBoolean("hud.enabled", true)) return;
+        List<Player> players = new ArrayList<>(plugin.getServer().getOnlinePlayers());
+        if (players.isEmpty()) { cursor = 0; lastTarget.clear(); lastMessage.clear(); return; }
+        int batchSize = Math.max(1, plugin.getConfig().getInt("hud.max-players-per-update", 8));
+        int amount = Math.min(batchSize, players.size());
+        if (cursor >= players.size()) cursor = 0;
+        for (int i = 0; i < amount; i++) {
+            if (cursor >= players.size()) cursor = 0;
+            update(players.get(cursor++));
         }
-        for (Player player : plugin.getServer().getOnlinePlayers()) {
-            update(player);
-        }
+        lastTarget.keySet().removeIf(id -> plugin.getServer().getPlayer(id) == null);
+        lastMessage.keySet().removeIf(id -> plugin.getServer().getPlayer(id) == null);
     }
 
     @EventHandler(ignoreCancelled = true)
     public void onInteract(PlayerInteractEvent event) {
-        if (event.getAction() == Action.RIGHT_CLICK_BLOCK && event.getClickedBlock() != null) {
-            send(event.getPlayer(), event.getClickedBlock(), true);
-        }
+        if (event.getAction() == Action.RIGHT_CLICK_BLOCK && event.getClickedBlock() != null) send(event.getPlayer(), event.getClickedBlock(), true);
     }
 
     private void update(Player player) {
+        if (!player.isOnline() || player.isDead()) return;
         Block block = player.getTargetBlockExact(plugin.settings().hudRange());
-        if (block == null) {
-            lastTarget.remove(player.getUniqueId());
-            lastMessage.remove(player.getUniqueId());
-            return;
-        }
-
+        if (block == null) { clear(player.getUniqueId()); return; }
         String key = blockKey(block);
-        if (key.equals(lastTarget.get(player.getUniqueId()))) {
-            return;
-        }
+        if (key.equals(lastTarget.get(player.getUniqueId()))) return;
         send(player, block, false);
     }
 
     private void send(Player player, Block block, boolean force) {
         FarmObjectType type = plugin.farmObjectManager().typeOf(block);
         if (type == null || !(block.getState() instanceof Barrel barrel)) {
+            if (!force) clear(player.getUniqueId());
             return;
         }
 
         Location location = block.getLocation();
         Inventory inventory = barrel.getInventory();
-        String state = barrel.getPersistentDataContainer().getOrDefault(
-                new NamespacedKey(plugin, "farm_state"), PersistentDataType.STRING, "HEALTHY");
-
+        String state = barrel.getPersistentDataContainer().getOrDefault(new NamespacedKey(plugin, "farm_state"), PersistentDataType.STRING, "HEALTHY");
         String message;
         if (type == FarmObjectType.LAND_FEEDER) {
             int animals = plugin.farmEntityService().getAnimals(location).size();
             int food = countAnimalFood(inventory);
             int water = count(inventory, Material.WATER_BUCKET);
-            message = "§6Ферма §7| §fЖивотные: §e" + animals + "§7/§e" + plugin.settings().animalCapacity()
-                    + " §7| §fКорм: §e" + food + " §7| §fВода: §b" + water + " §7| " + stateText(state);
+            message = "§6Ферма §7| §fЖивотные: §e" + animals + "§7/§e" + plugin.settings().animalCapacity() + " §7| §fКорм: §e" + food + " §7| §fВода: §b" + water + " §7| " + stateText(state);
         } else {
             int fish = plugin.farmEntityService().getFish(location).size();
             int food = countFishFood(inventory);
-            message = "§bАквакультура §7| §fРыбы: §e" + fish + "§7/§e" + plugin.settings().fishCapacity()
-                    + " §7| §fКорм: §e" + food + " §7| " + stateText(state);
+            message = "§bАквакультура §7| §fРыбы: §e" + fish + "§7/§e" + plugin.settings().fishCapacity() + " §7| §fКорм: §e" + food + " §7| " + stateText(state);
         }
 
         UUID id = player.getUniqueId();
         String key = blockKey(block);
-        if (!force && key.equals(lastTarget.get(id)) && message.equals(lastMessage.get(id))) {
-            return;
-        }
-
+        if (!force && key.equals(lastTarget.get(id)) && message.equals(lastMessage.get(id))) return;
         lastTarget.put(id, key);
         lastMessage.put(id, message);
         player.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent.fromLegacyText(message));
     }
 
-    private String blockKey(Block block) {
-        return block.getWorld().getUID() + ":" + block.getX() + ":" + block.getY() + ":" + block.getZ();
-    }
-
-    private String stateText(String state) {
-        return switch (state) {
-            case "FULL" -> "§cЗаполнено";
-            case "NO_FOOD" -> "§cНет корма";
-            case "NO_WATER" -> "§cНет воды";
-            default -> "§aВ норме";
-        };
-    }
-
-    private int countAnimalFood(Inventory inventory) {
-        int count = 0;
-        for (ItemStack item : inventory.getContents()) {
-            if (item != null && plugin.farmFoodService().isAnimalFood(item.getType())) {
-                count += item.getAmount();
-            }
-        }
-        return count;
-    }
-
-    private int countFishFood(Inventory inventory) {
-        int count = 0;
-        for (ItemStack item : inventory.getContents()) {
-            if (item != null && plugin.farmFoodService().isFishFood(item.getType())) {
-                count += item.getAmount();
-            }
-        }
-        return count;
-    }
-
-    private int count(Inventory inventory, Material material) {
-        int count = 0;
-        for (ItemStack item : inventory.getContents()) {
-            if (item != null && item.getType() == material) {
-                count += item.getAmount();
-            }
-        }
-        return count;
-    }
+    private void clear(UUID id) { lastTarget.remove(id); lastMessage.remove(id); }
+    private String blockKey(Block block) { return block.getWorld().getUID() + ":" + block.getX() + ":" + block.getY() + ":" + block.getZ(); }
+    private String stateText(String state) { return switch (state) { case "FULL" -> "§cЗаполнено"; case "NO_FOOD" -> "§cНет корма"; case "NO_WATER" -> "§cНет воды"; default -> "§aВ норме"; }; }
+    private int countAnimalFood(Inventory inventory) { int count = 0; for (ItemStack item : inventory.getContents()) if (item != null && plugin.farmFoodService().isAnimalFood(item.getType())) count += item.getAmount(); return count; }
+    private int countFishFood(Inventory inventory) { int count = 0; for (ItemStack item : inventory.getContents()) if (item != null && plugin.farmFoodService().isFishFood(item.getType())) count += item.getAmount(); return count; }
+    private int count(Inventory inventory, Material material) { int count = 0; for (ItemStack item : inventory.getContents()) if (item != null && item.getType() == material) count += item.getAmount(); return count; }
 }
