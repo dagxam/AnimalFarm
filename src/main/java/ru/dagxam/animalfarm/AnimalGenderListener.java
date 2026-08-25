@@ -1,6 +1,5 @@
 package ru.dagxam.animalfarm;
 
-import org.bukkit.Chunk;
 import org.bukkit.entity.Ageable;
 import org.bukkit.entity.Animals;
 import org.bukkit.entity.Entity;
@@ -8,7 +7,6 @@ import org.bukkit.entity.Sheep;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.CreatureSpawnEvent;
-import org.bukkit.event.entity.EntityBreedEvent;
 import org.bukkit.event.entity.SheepDyeWoolEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
@@ -37,27 +35,9 @@ public final class AnimalGenderListener implements Listener {
     }
 
     private void handleAnimal(Entity entity) {
-        if (!(entity instanceof Animals animal) || !genders.supported(animal)) {
-            return;
-        }
-
-        // Если пол уже сохранён в PDC, getOrAssign его не изменит.
+        if (!(entity instanceof Animals animal) || !genders.supported(animal)) return;
         genders.assignRandomIfSupported(animal);
         plugin.visualManager().applyVisualAfterSpawn(animal);
-    }
-
-    @EventHandler(ignoreCancelled = true)
-    public void onBreed(EntityBreedEvent event) {
-        if (!(event.getMother() instanceof Animals mother) || !(event.getFather() instanceof Animals father)) {
-            return;
-        }
-
-        if (!genders.canBreed(mother, father)) {
-            event.setCancelled(true);
-            return;
-        }
-
-        handleAnimal(event.getEntity());
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -70,23 +50,13 @@ public final class AnimalGenderListener implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onInfo(PlayerInteractEntityEvent event) {
-        if (event.getHand() != EquipmentSlot.HAND) {
-            return;
-        }
-        if (!plugin.getConfig().getBoolean("animal-genders.interaction.show-info-on-right-click", true)) {
-            return;
-        }
-        if (event.getPlayer().isSneaking()) {
-            return;
-        }
-        if (event.getPlayer().getInventory().getItemInMainHand().getType().name().endsWith("BUCKET")) {
-            return;
-        }
+        if (event.getHand() != EquipmentSlot.HAND) return;
+        if (!plugin.getConfig().getBoolean("animal-genders.interaction.show-info-on-right-click", true)) return;
+        if (event.getPlayer().isSneaking()) return;
+        if (event.getPlayer().getInventory().getItemInMainHand().getType().name().endsWith("BUCKET")) return;
 
         Entity entity = event.getRightClicked();
-        if (!(entity instanceof Animals animal) || !genders.supported(animal)) {
-            return;
-        }
+        if (!(entity instanceof Animals animal) || !genders.supported(animal)) return;
 
         AnimalGender gender = genders.getOrAssign(animal);
         String sex = gender == AnimalGender.MALE ? "Мужской" : "Женский";
