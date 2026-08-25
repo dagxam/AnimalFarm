@@ -11,11 +11,13 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.UUID;
 
-/** Хранит доверенных игроков непосредственно в PDC каждой кормушки/аквариума. */
+/** Хранит владельца и доверенных игроков непосредственно в PDC каждой кормушки/аквариума. */
 public final class FarmOwnershipManager {
     private final AnimalFarmPlugin plugin;
 
-    public FarmOwnershipManager(AnimalFarmPlugin plugin) { this.plugin = plugin; }
+    public FarmOwnershipManager(AnimalFarmPlugin plugin) {
+        this.plugin = plugin;
+    }
 
     public boolean isOwner(Player player, Block block) {
         UUID owner = plugin.farmObjectManager().ownerOf(block);
@@ -37,43 +39,82 @@ public final class FarmOwnershipManager {
     }
 
     public boolean trust(Player owner, Block block, OfflinePlayer target) {
-        if (!canManage(owner, block) || target.getUniqueId().equals(owner.getUniqueId())) return false;
+        if (target == null || target.getUniqueId().equals(owner.getUniqueId())) return false;
+        if (!canManage(owner, block)) return false;
+
         Set<UUID> trusted = trusted(block);
         boolean changed = trusted.add(target.getUniqueId());
-        save(block, trusted);
+        if (changed) save(block, trusted);
         return changed;
     }
 
     public boolean untrust(Player owner, Block block, OfflinePlayer target) {
-        if (!canManage(owner, block)) return false;
+        if (target == null || !canManage(owner, block)) return false;
+
         Set<UUID> trusted = trusted(block);
         boolean changed = trusted.remove(target.getUniqueId());
-        save(block, trusted);
+        if (changed) save(block, trusted);
         return changed;
     }
 
     public Set<UUID> trusted(Block block) {
         if (!(block.getState() instanceof Barrel barrel)) return Set.of();
-        String raw = barrel.getPersistentDataContainer().get(key(), PersistentDataType.STRING);
+        String raw = barrel.getPersistentDataContainer().get(trustedKey(), PersistentDataType.STRING);
         if (raw == null || raw.isBlank()) return new LinkedHashSet<>();
+
         Set<UUID> result = new LinkedHashSet<>();
-        for (String part : raw.split(",")) try { result.add(UUID.fromString(part)); } catch (IllegalArgumentException ignored) { }
+        for (String part : raw.split(",")) {
+            try {
+                result.add(UUID.fromString(part));
+            } catch (IllegalArgumentException ignored) {
+                // Повреждённая запись не должна ломать весь список доверенных.
+            }
+        }
         return result;
     }
 
-    public void transfer(Player owner, Block block, OfflinePlayer target) {
-        if (!(block.getState() instanceof Barrel barrel)) return;
-        barrel.getPersistentDataContainer().set(new NamespacedKey(plugin, "owner_uuid"), PersistentDataType.STRING, target.getUniqueId().toString());
-        barrel.getPersistentDataContainer().set(new NamespacedKey(plugin, "owner_name"), PersistentDataType.STRING, target.getName() == null ? target.getUniqueId().toString() : target.getName());
+    /**
+     * Передаёт объект новому владельцу и полностью очищает старый trusted-список.
+     */
+    public boolean transfer(Player owner, Block block, OfflinePlayer target) {
+        if (owner == null || target == null) return false;
+        if (!canManage(owner, block)) return false;
+        if (target.getUniqueId().equals(owner.getUniqueId())) return false;
+        if (!(block.getState() instanceof Barrel barrel)) return false;
+
+        barrel.getPersistentDataContainer().set(ownerUuidKey(), PersistentDataType.STRING, target.getUniqueId().toString());
+        barrel.getPersistentDataContainer().set(
+                ownerNameKey(),
+                PersistentDataType.STRING,
+                target.getName() == null ? target.getUniqueId().toString() : target.getName()
+        );
+        // После передачи старые доверенные не должны сохранять доступ.
+        barrel.getPersistentDataContainer().remove(trustedKey());
         barrel.update(true, false);
+        return true;
     }
 
     private void save(Block block, Set<UUID> trusted) {
         if (!(block.getState() instanceof Barrel barrel)) return;
+
         String value = trusted.stream().map(UUID::toString).reduce((a, b) -> a + "," + b).orElse("");
-        barrel.getPersistentDataContainer().set(key(), PersistentDataType.STRING, value);
+        if (value.isBlank()) {
+            barrel.getPersistentDataContainer().remove(trustedKey());
+        } else {
+            barrel.getPersistentDataContainer().set(trustedKey(), PersistentDataType.STRING, value);
+        }
         barrel.update(true, false);
     }
 
-    private NamespacedKey key() { return new NamespacedKey(plugin, "trusted_players"); }
+    private NamespacedKey ownerUuidKey() {
+        return new NamespacedKey(plugin, "owner_uuid");
+    }
+
+    private NamespacedKey ownerNameKey() {
+        return new NamespacedKey(plugin, "owner_name");
+    }
+
+    private NamespacedKey trustedKey() {
+        return new NamespacedKey(plugin, "trusted_players");
+    }
 }
