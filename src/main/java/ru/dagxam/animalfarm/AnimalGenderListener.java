@@ -9,13 +9,12 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityBreedEvent;
-import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.entity.SheepDyeWoolEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.inventory.EquipmentSlot;
 
-/** Назначает пол и применяет разрешённые варианты при любом появлении животных. */
+/** Назначает и восстанавливает пол животных при спавне и загрузке чанков. */
 public final class AnimalGenderListener implements Listener {
     private final AnimalFarmPlugin plugin;
     private final AnimalGenderManager genders;
@@ -27,53 +26,43 @@ public final class AnimalGenderListener implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onSpawn(CreatureSpawnEvent event) {
-        handleSpawn(event.getEntity());
+        handleAnimal(event.getEntity());
     }
 
-    /** Обрабатывает обычный, естественный и программный спавн. */
-    @EventHandler(ignoreCancelled = true)
-    public void onEntitySpawn(EntitySpawnEvent event) {
-        handleSpawn(event.getEntity());
-    }
-
-    /**
-     * Ключевая дополнительная обработка генерации мира и новых чанков.
-     * Если животное появилось при генерации раньше/в обход события спавна,
-     * оно всё равно получает нужный пол и только разрешённый вариант.
-     */
     @EventHandler
     public void onChunkLoad(ChunkLoadEvent event) {
-        Chunk chunk = event.getChunk();
-        for (Entity entity : chunk.getEntities()) {
-            handleSpawn(entity);
+        for (Entity entity : event.getChunk().getEntities()) {
+            handleAnimal(entity);
         }
     }
 
-    private void handleSpawn(Entity entity) {
-        if (!(entity instanceof Animals animal) || !genders.supported(animal)) return;
+    private void handleAnimal(Entity entity) {
+        if (!(entity instanceof Animals animal) || !genders.supported(animal)) {
+            return;
+        }
+
+        // Если пол уже сохранён в PDC, getOrAssign его не изменит.
         genders.assignRandomIfSupported(animal);
         plugin.visualManager().applyVisualAfterSpawn(animal);
     }
 
     @EventHandler(ignoreCancelled = true)
     public void onBreed(EntityBreedEvent event) {
-        if (!(event.getMother() instanceof Animals mother) || !(event.getFather() instanceof Animals father)) return;
+        if (!(event.getMother() instanceof Animals mother) || !(event.getFather() instanceof Animals father)) {
+            return;
+        }
+
         if (!genders.canBreed(mother, father)) {
             event.setCancelled(true);
             return;
         }
 
-        if (event.getEntity() instanceof Animals baby && genders.supported(baby)) {
-            // Детёныш обрабатывается той же системой, что и животное,
-            // с теми же строго разрешёнными вариантами.
-            handleSpawn(baby);
-        }
+        handleAnimal(event.getEntity());
     }
 
     @EventHandler(ignoreCancelled = true)
     public void onSheepDye(SheepDyeWoolEvent event) {
         Sheep sheep = event.getEntity();
-        // Самца нельзя перекрасить, чтобы чёрный/серый признак пола не потерялся.
         if (genders.supported(sheep) && genders.getOrAssign(sheep) == AnimalGender.MALE) {
             event.setCancelled(true);
         }
@@ -81,18 +70,31 @@ public final class AnimalGenderListener implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onInfo(PlayerInteractEntityEvent event) {
-        if (event.getHand() != EquipmentSlot.HAND) return;
-        if (!plugin.getConfig().getBoolean("animal-genders.interaction.show-info-on-right-click", true)) return;
+        if (event.getHand() != EquipmentSlot.HAND) {
+            return;
+        }
+        if (!plugin.getConfig().getBoolean("animal-genders.interaction.show-info-on-right-click", true)) {
+            return;
+        }
+        if (event.getPlayer().isSneaking()) {
+            return;
+        }
+        if (event.getPlayer().getInventory().getItemInMainHand().getType().name().endsWith("BUCKET")) {
+            return;
+        }
+
         Entity entity = event.getRightClicked();
-        if (!(entity instanceof Animals animal) || !genders.supported(animal)) return;
-        if (event.getPlayer().isSneaking()) return;
-        if (event.getPlayer().getInventory().getItemInMainHand().getType().name().endsWith("BUCKET")) return;
+        if (!(entity instanceof Animals animal) || !genders.supported(animal)) {
+            return;
+        }
 
         AnimalGender gender = genders.getOrAssign(animal);
-        String species = displayName(animal, gender);
         String sex = gender == AnimalGender.MALE ? "Мужской" : "Женский";
-        String age = animal instanceof Ageable ageable && !ageable.isAdult() ? "Детёныш" : adultAge(gender);
-        event.getPlayer().sendMessage(plugin.message("prefix") + "&fЖивотное: &e" + species);
+        String age = animal instanceof Ageable ageable && !ageable.isAdult()
+                ? "Детёныш"
+                : gender == AnimalGender.MALE ? "Взрослый" : "Взрослая";
+
+        event.getPlayer().sendMessage(plugin.message("prefix") + "&fЖивотное: &e" + displayName(animal, gender));
         event.getPlayer().sendMessage("&fПол: &e" + sex);
         event.getPlayer().sendMessage("&fВозраст: &e" + age);
     }
@@ -100,16 +102,13 @@ public final class AnimalGenderListener implements Listener {
     private String displayName(Animals animal, AnimalGender gender) {
         return switch (animal.getType()) {
             case COW -> gender == AnimalGender.MALE ? "Бык" : "Корова";
-            case MOOSHROOM -> "Корова";
             case SHEEP -> gender == AnimalGender.MALE ? "Баран" : "Овца";
             case GOAT -> gender == AnimalGender.MALE ? "Козёл" : "Коза";
             case PIG -> gender == AnimalGender.MALE ? "Хряк" : "Свинья";
             case CHICKEN -> gender == AnimalGender.MALE ? "Петух" : "Курица";
+            case HORSE -> gender == AnimalGender.MALE ? "Жеребец" : "Лошадь";
+            case RABBIT -> gender == AnimalGender.MALE ? "Кролик" : "Крольчиха";
             default -> animal.getType().name();
         };
-    }
-
-    private String adultAge(AnimalGender gender) {
-        return gender == AnimalGender.MALE ? "Взрослый" : "Взрослая";
     }
 }
