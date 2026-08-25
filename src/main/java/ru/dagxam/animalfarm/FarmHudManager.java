@@ -7,9 +7,6 @@ import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.Barrel;
 import org.bukkit.block.Block;
-import org.bukkit.entity.Animals;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.Fish;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -18,55 +15,76 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-/** Расширенный HUD фермы: количество, вместимость, ресурсы и состояние. */
+/** HUD фермы с единым scheduler вместо обработки каждого PlayerMoveEvent. */
 public final class FarmHudManager implements Listener {
-    private static final long UPDATE_INTERVAL_MS = 250L;
     private final AnimalFarmPlugin plugin;
-    private final Map<UUID, Long> next = new HashMap<>();
-    private final Map<UUID, String> last = new HashMap<>();
+    private final Map<UUID, String> lastTarget = new HashMap<>();
+    private final Map<UUID, String> lastMessage = new HashMap<>();
+    private BukkitTask task;
 
     public FarmHudManager(AnimalFarmPlugin plugin) {
         this.plugin = plugin;
     }
 
-    @EventHandler(ignoreCancelled = true)
-    public void onMove(org.bukkit.event.player.PlayerMoveEvent event) {
-        if (event.getFrom().getBlockX() == event.getTo().getBlockX()
-                && event.getFrom().getBlockY() == event.getTo().getBlockY()
-                && event.getFrom().getBlockZ() == event.getTo().getBlockZ()) return;
-        update(event.getPlayer());
+    public void start() {
+        if (task != null) {
+            return;
+        }
+        long interval = Math.max(5L, plugin.getConfig().getLong("hud.update-interval-ticks", 10L));
+        task = plugin.getServer().getScheduler().runTaskTimer(plugin, this::updateAll, interval, interval);
+    }
+
+    public void stop() {
+        if (task != null) {
+            task.cancel();
+            task = null;
+        }
+        lastTarget.clear();
+        lastMessage.clear();
+    }
+
+    private void updateAll() {
+        if (!plugin.getConfig().getBoolean("hud.enabled", true)) {
+            return;
+        }
+        for (Player player : plugin.getServer().getOnlinePlayers()) {
+            update(player);
+        }
     }
 
     @EventHandler(ignoreCancelled = true)
     public void onInteract(PlayerInteractEvent event) {
         if (event.getAction() == Action.RIGHT_CLICK_BLOCK && event.getClickedBlock() != null) {
-            send(event.getPlayer(), event.getClickedBlock());
+            send(event.getPlayer(), event.getClickedBlock(), true);
         }
     }
 
     private void update(Player player) {
-        if (!plugin.getConfig().getBoolean("hud.enabled", true)) return;
-        long now = System.currentTimeMillis();
-        UUID id = player.getUniqueId();
-        if (now < next.getOrDefault(id, 0L)) return;
-        next.put(id, now + UPDATE_INTERVAL_MS);
-
         Block block = player.getTargetBlockExact(plugin.settings().hudRange());
-        if (block == null) return;
-        String key = block.getWorld().getUID() + ":" + block.getX() + ":" + block.getY() + ":" + block.getZ();
-        if (key.equals(last.get(id))) return;
-        last.put(id, key);
-        send(player, block);
+        if (block == null) {
+            lastTarget.remove(player.getUniqueId());
+            lastMessage.remove(player.getUniqueId());
+            return;
+        }
+
+        String key = blockKey(block);
+        if (key.equals(lastTarget.get(player.getUniqueId()))) {
+            return;
+        }
+        send(player, block, false);
     }
 
-    private void send(Player player, Block block) {
+    private void send(Player player, Block block, boolean force) {
         FarmObjectType type = plugin.farmObjectManager().typeOf(block);
-        if (type == null || !(block.getState() instanceof Barrel barrel)) return;
+        if (type == null || !(block.getState() instanceof Barrel barrel)) {
+            return;
+        }
 
         Location location = block.getLocation();
         Inventory inventory = barrel.getInventory();
@@ -75,22 +93,31 @@ public final class FarmHudManager implements Listener {
 
         String message;
         if (type == FarmObjectType.LAND_FEEDER) {
-            int animals = countAnimals(location);
+            int animals = plugin.farmEntityService().getAnimals(location).size();
             int food = countAnimalFood(inventory);
             int water = count(inventory, Material.WATER_BUCKET);
             message = "§6Ферма §7| §fЖивотные: §e" + animals + "§7/§e" + plugin.settings().animalCapacity()
                     + " §7| §fКорм: §e" + food + " §7| §fВода: §b" + water + " §7| " + stateText(state);
         } else {
-            int fish = countFish(location);
+            int fish = plugin.farmEntityService().getFish(location).size();
             int food = countFishFood(inventory);
             message = "§bАквакультура §7| §fРыбы: §e" + fish + "§7/§e" + plugin.settings().fishCapacity()
                     + " §7| §fКорм: §e" + food + " §7| " + stateText(state);
         }
-        sendActionBar(player, message);
+
+        UUID id = player.getUniqueId();
+        String key = blockKey(block);
+        if (!force && key.equals(lastTarget.get(id)) && message.equals(lastMessage.get(id))) {
+            return;
+        }
+
+        lastTarget.put(id, key);
+        lastMessage.put(id, message);
+        player.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent.fromLegacyText(message));
     }
 
-    private void sendActionBar(Player player, String message) {
-        player.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent.fromLegacyText(message));
+    private String blockKey(Block block) {
+        return block.getWorld().getUID() + ":" + block.getX() + ":" + block.getY() + ":" + block.getZ();
     }
 
     private String stateText(String state) {
@@ -102,35 +129,12 @@ public final class FarmHudManager implements Listener {
         };
     }
 
-    private int countAnimals(Location location) {
-        int count = 0;
-        for (Entity entity : location.getWorld().getNearbyEntities(location,
-                plugin.settings().penMaxRadius() + 1,
-                plugin.settings().penVerticalRange(),
-                plugin.settings().penMaxRadius() + 1)) {
-            if (entity instanceof Animals animal && switch (animal.getType()) {
-                case COW, SHEEP, GOAT, CHICKEN, HORSE, RABBIT -> true;
-                default -> false;
-            }) count++;
-        }
-        return count;
-    }
-
-    private int countFish(Location location) {
-        int count = 0;
-        for (Entity entity : location.getWorld().getNearbyEntities(location,
-                plugin.settings().aquariumMaxRadius(),
-                plugin.settings().aquariumVerticalRange(),
-                plugin.settings().aquariumMaxRadius())) {
-            if (entity instanceof Fish fish && fish.getLocation().getBlock().getType() == Material.WATER) count++;
-        }
-        return count;
-    }
-
     private int countAnimalFood(Inventory inventory) {
         int count = 0;
         for (ItemStack item : inventory.getContents()) {
-            if (item != null && isAnimalFood(item.getType())) count += item.getAmount();
+            if (item != null && plugin.farmFoodService().isAnimalFood(item.getType())) {
+                count += item.getAmount();
+            }
         }
         return count;
     }
@@ -138,31 +142,19 @@ public final class FarmHudManager implements Listener {
     private int countFishFood(Inventory inventory) {
         int count = 0;
         for (ItemStack item : inventory.getContents()) {
-            if (item != null && isFishFood(item.getType())) count += item.getAmount();
+            if (item != null && plugin.farmFoodService().isFishFood(item.getType())) {
+                count += item.getAmount();
+            }
         }
         return count;
-    }
-
-    private boolean isSeed(Material material) {
-        return material.name().endsWith("_SEEDS") || material == Material.PITCHER_POD;
-    }
-
-    private boolean isFishFood(Material material) {
-        return isSeed(material) || material == Material.SEAGRASS
-                || material == Material.KELP || material == Material.SEA_PICKLE;
-    }
-
-    private boolean isAnimalFood(Material material) {
-        return isFishFood(material) || material == Material.WHEAT || material == Material.HAY_BLOCK
-                || material == Material.APPLE || material == Material.CARROT || material == Material.MELON_SLICE
-                || material == Material.PUMPKIN || material == Material.MELON || material == Material.GOLDEN_APPLE
-                || material == Material.GOLDEN_CARROT;
     }
 
     private int count(Inventory inventory, Material material) {
         int count = 0;
         for (ItemStack item : inventory.getContents()) {
-            if (item != null && item.getType() == material) count += item.getAmount();
+            if (item != null && item.getType() == material) {
+                count += item.getAmount();
+            }
         }
         return count;
     }
