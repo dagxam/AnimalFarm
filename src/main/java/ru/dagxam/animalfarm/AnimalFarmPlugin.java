@@ -42,6 +42,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         startTickTask();
         startFarmTask();
         genderHudManager.start();
+        manualWoolManager.start();
         visualManager.refreshLoadedAnimals();
         getLogger().info("AnimalFarm успешно запущен.");
     }
@@ -51,6 +52,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         if (tickTask != null) tickTask.cancel();
         if (taskScheduler != null) taskScheduler.stop();
         if (genderHudManager != null) genderHudManager.stop();
+        if (manualWoolManager != null) manualWoolManager.stop();
         if (visualManager != null) visualManager.shutdown();
         if (farmObjectManager != null) farmObjectManager.clear();
         if (areaAnalyzer != null) areaAnalyzer.clear();
