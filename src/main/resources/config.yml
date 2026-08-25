@@ -85,7 +85,11 @@ fishing:
 
 milking:
   enabled: true
-  animals: { cow: true, sheep: true, goat: true }
+  animals:
+    cow: true
+    sheep: true
+    goat: true
+    horse: true
   milk-min: 1
   milk-max: 3
 
@@ -116,6 +120,7 @@ messages:
   milk-cow: "&aВы надоили корову."
   milk-sheep: "&aВы надоили овцу."
   milk-goat: "&aВы надоили козу."
+  milk-horse: "&aВы надоили лошадь."
   milk-male: "&cЭто самец. Он не даёт молоко."
   milk-cooldown: "&eВы уже доили сегодня."
   milk-baby: "&aМалыш выпил молоко."
