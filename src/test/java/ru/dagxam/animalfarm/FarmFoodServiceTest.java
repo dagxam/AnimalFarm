@@ -26,8 +26,21 @@ class FarmFoodServiceTest {
             assertTrue(service.isFoodFor(type, Material.SHORT_GRASS));
             assertTrue(service.isFoodFor(type, Material.TALL_GRASS));
             assertTrue(service.isFoodFor(type, Material.OAK_LEAVES));
+            assertTrue(service.isFoodFor(type, Material.BIRCH_LEAVES));
+            assertTrue(service.isFoodFor(type, Material.CHERRY_LEAVES));
             assertFalse(service.isFoodFor(type, Material.WHEAT_SEEDS));
             assertFalse(service.isFoodFor(type, Material.CARROT));
+        }
+    }
+
+    @Test
+    void anyLeavesGroupAcceptsAllLeafMaterials() {
+        for (Material material : Material.values()) {
+            if (material.name().endsWith("_LEAVES")) {
+                assertTrue(service.isAnimalFood(material), material + " must be accepted by ANY_LEAVES");
+                assertTrue(service.isFoodFor(EntityType.COW, material), material + " must feed grazers");
+                assertFalse(service.isFoodFor(EntityType.CHICKEN, material), material + " must not feed chickens");
+            }
         }
     }
 
@@ -42,6 +55,18 @@ class FarmFoodServiceTest {
         assertFalse(service.isFoodFor(EntityType.CHICKEN, Material.WHEAT));
         assertFalse(service.isFoodFor(EntityType.CHICKEN, Material.OAK_LEAVES));
         assertFalse(service.isFoodFor(EntityType.CHICKEN, Material.CARROT));
+    }
+
+    @Test
+    void anySeedsGroupRemainsExplicitAndDoesNotAcceptUnrelatedItems() {
+        assertTrue(service.isFoodFor(EntityType.CHICKEN, Material.WHEAT_SEEDS));
+        assertTrue(service.isFoodFor(EntityType.CHICKEN, Material.BEETROOT_SEEDS));
+        assertTrue(service.isFoodFor(EntityType.CHICKEN, Material.MELON_SEEDS));
+        assertTrue(service.isFoodFor(EntityType.CHICKEN, Material.PUMPKIN_SEEDS));
+        assertTrue(service.isFoodFor(EntityType.CHICKEN, Material.TORCHFLOWER_SEEDS));
+        assertTrue(service.isFoodFor(EntityType.CHICKEN, Material.PITCHER_POD));
+        assertFalse(service.isFoodFor(EntityType.CHICKEN, Material.BREAD));
+        assertFalse(service.isFoodFor(EntityType.CHICKEN, Material.WHEAT));
     }
 
     @Test
