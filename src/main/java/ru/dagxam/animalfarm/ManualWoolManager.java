@@ -12,20 +12,29 @@ import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
 
 /** Шерсть больше не хранится и не производится кормушкой: овец стригут вручную обычными ножницами. */
 public final class ManualWoolManager implements Listener {
     private final JavaPlugin plugin;
     private final NamespacedKey feederKey;
+    private BukkitTask cleanupTask;
 
     public ManualWoolManager(JavaPlugin plugin) {
         this.plugin = plugin;
         this.feederKey = new NamespacedKey(plugin, "feeder_block");
-        plugin.getServer().getPluginManager().registerEvents(this, plugin);
-        new BukkitRunnable() {
-            @Override public void run() { clearFeederWool(); }
-        }.runTaskTimer(plugin, 1L, 20L);
+    }
+
+    public void start() {
+        if (cleanupTask != null) cleanupTask.cancel();
+        cleanupTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::clearFeederWool, 1L, 20L);
+    }
+
+    public void stop() {
+        if (cleanupTask != null) {
+            cleanupTask.cancel();
+            cleanupTask = null;
+        }
     }
 
     @EventHandler(ignoreCancelled = true)
