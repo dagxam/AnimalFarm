@@ -5,9 +5,11 @@ import org.bukkit.entity.Player;
 
 /** Единая точка проверки доступа к объектам AnimalFarm. */
 public final class FarmAccessService {
+    private final AnimalFarmPlugin plugin;
     private final FarmOwnershipManager ownershipManager;
 
-    public FarmAccessService(FarmOwnershipManager ownershipManager) {
+    public FarmAccessService(AnimalFarmPlugin plugin, FarmOwnershipManager ownershipManager) {
+        this.plugin = plugin;
         this.ownershipManager = ownershipManager;
     }
 
@@ -19,8 +21,14 @@ public final class FarmAccessService {
         return ownershipManager.canManage(player, block);
     }
 
-    /** Действия, разрешённые только владельцу или администратору. */
+    /**
+     * Сбор из аквариума подчиняется owner-only-harvest.
+     * При выключенной настройке используется обычное право использования объекта.
+     */
     public boolean canHarvest(Player player, Block block) {
-        return ownershipManager.canManage(player, block);
+        if (!plugin.settings().aquariumOwnerOnlyHarvest()) {
+            return canUse(player, block);
+        }
+        return canManage(player, block);
     }
 }
