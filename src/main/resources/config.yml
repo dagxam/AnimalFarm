@@ -1,6 +1,7 @@
 # ============================================================
-# AnimalFarm — полная конфигурация фермы v2
-# Плагин не привязан к конкретному ядру и использует совместимый API.
+# AnimalFarm — полная конфигурация фермы
+# Плагин использует совместимый Bukkit/Spigot API и не привязан
+# к конкретному серверному ядру.
 # После изменения: /animalfarm reload
 # ============================================================
 feeder:
@@ -26,17 +27,8 @@ hud:
   range: 6
 
 # ============================================================
-# Ресурс-пак AnimalFarm
-# URL должен вести непосредственно на ZIP-файл ресурс-пака.
-# ============================================================
-resource-pack:
-  enabled: true
-  url: "https://raw.githubusercontent.com/dagxam/AnimalFarm/main/resourcepack/AnimalFarm-Gender-ResourcePack.zip"
-
-# ============================================================
 # Система пола животных
 # Пол хранится непосредственно в животном через PersistentDataContainer.
-# После назначения не меняется и сохраняется после перезапуска сервера.
 # ============================================================
 animal-genders:
   enabled: true
@@ -48,6 +40,8 @@ animal-genders:
     goat: true
     pig: true
     chicken: true
+    horse: true
+    rabbit: true
   interaction:
     show-info-on-right-click: true
   breeding:
@@ -56,11 +50,6 @@ animal-genders:
     females-only: true
   visuals:
     enabled: true
-    # Коровы, свиньи и куры на современных версиях Minecraft используют
-    # встроенные ванильные варианты: самец=WARM, самка=TEMPERATE.
-    # Баран всегда чёрный.
-    # Для козы ванильного варианта текстуры нет, поэтому отдельная текстура
-    # требует клиентской системы вариантов или отдельного будущего решения.
     male-variant: WARM
     female-variant: TEMPERATE
     black-ram: true
@@ -68,41 +57,56 @@ animal-genders:
 feeding:
   daily-consumption-min: 3
   daily-consumption-max: 5
-  cow: { foods: [HAY_BLOCK, WHEAT, APPLE, MELON_SLICE, PUMPKIN, MELON] }
-  sheep: { foods: [HAY_BLOCK, WHEAT, ANY_GRASS_LEAVES_BUSHES_FLOWERS] }
-  goat: { foods: [HAY_BLOCK, WHEAT, ANY_GRASS_LEAVES_BUSHES_FLOWERS] }
+  cow: { foods: [WHEAT, HAY_BLOCK, GRASS_BLOCK, GRASS, TALL_GRASS, ANY_LEAVES] }
+  sheep: { foods: [WHEAT, HAY_BLOCK, GRASS_BLOCK, GRASS, TALL_GRASS, ANY_LEAVES] }
+  goat: { foods: [WHEAT, HAY_BLOCK, GRASS_BLOCK, GRASS, TALL_GRASS, ANY_LEAVES] }
   pig: { foods: [CARROT, POTATO, BEETROOT] }
-  horse: { foods: [HAY_BLOCK, WHEAT, ANY_GRASS_LEAVES_BUSHES_FLOWERS] }
+  horse: { foods: [WHEAT, HAY_BLOCK, GRASS_BLOCK, GRASS, TALL_GRASS, ANY_LEAVES] }
   rabbit: { foods: [CARROT, GOLDEN_CARROT] }
-  chicken: { foods: [ANY_SEEDS, ANY_GRASS_LEAVES_BUSHES_FLOWERS] }
+  chicken: { foods: [ANY_SEEDS] }
   fish: { foods: [ANY_SEEDS, SEAGRASS, KELP, SEA_PICKLE] }
+
 golden:
   cycles-min: 2
   cycles-max: 3
+
 mob-bucket:
   enabled: true
+
 fishing:
   enabled: true
-  live-catch-chance: 90
-  mobs: { fish: true, axolotl: true, squid: true, glow-squid: true, turtle: true, dolphin: true, frog: true }
+  live-catch-chance: 25
+  mobs:
+    fish: true
+    axolotl: true
+    squid: true
+    glow-squid: true
+    turtle: false
+    dolphin: false
+    frog: false
+
 milking:
   enabled: true
   animals: { cow: true, sheep: true, goat: true }
   milk-min: 1
   milk-max: 3
+
 baby:
   milk-feedings-min: 1
   milk-feedings-max: 3
+
 production:
   chicken: { eggs-min: 5, eggs-max: 10 }
   wool: { min: 2, max: 3 }
+
 drops:
   cow: { meat: { min: 1, max: 1 }, leather: { min: 1, max: 1 }, bone: { min: 2, max: 2 } }
   sheep: { meat: { min: 1, max: 1 }, leather: { min: 1, max: 1 }, wool: { min: 1, max: 1 }, bone: { min: 1, max: 1 } }
   goat: { meat: { min: 1, max: 1 }, leather: { min: 1, max: 1 }, bone: { min: 1, max: 1 } }
   chicken: { meat: { min: 1, max: 1 }, feather: { min: 2, max: 2 } }
-  horse: { meat: { min: 1, max: 1 }, leather: { min: 1, max: 1 }, bone: { min: 2, max: 2 } }
+  horse: { meat: { min: 1, max: 1 }, leather: { min: 2, max: 2 }, bone: { min: 1, max: 1 } }
   rabbit: { meat: { min: 1, max: 1 }, rabbit-hide: { min: 1, max: 1 }, bone: { min: 1, max: 1 } }
+
 messages:
   prefix: "&8[&6AnimalFarm&8] &r"
   no-permission: "&cУ вас нет прав для выполнения этой команды."
