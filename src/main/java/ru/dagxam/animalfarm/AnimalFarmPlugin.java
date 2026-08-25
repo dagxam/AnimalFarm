@@ -29,6 +29,8 @@ public final class AnimalFarmPlugin extends JavaPlugin {
     private MilkManager milkManager;
     private FishingManager fishingManager;
     private FarmHudManager hudManager;
+    private MobBucketManager mobBucketManager;
+    private ManualWoolManager manualWoolManager;
 
     @Override
     public void onEnable() {
@@ -69,6 +71,8 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         milkManager = new MilkManager(this, settings);
         fishingManager = new FishingManager(this);
         hudManager = new FarmHudManager(this);
+        mobBucketManager = new MobBucketManager(this);
+        manualWoolManager = new ManualWoolManager(this);
     }
 
     private void registerListeners() {
@@ -81,6 +85,8 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         pm.registerEvents(new FreshFishReleaseManager(this), this);
         pm.registerEvents(new AquariumFishHarvestManager(this), this);
         pm.registerEvents(new AnimalGenderListener(this, genderManager), this);
+        pm.registerEvents(mobBucketManager, this);
+        pm.registerEvents(manualWoolManager, this);
     }
 
     private void registerCommand() {
@@ -139,6 +145,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         registerFishRecipe("aquarium_shelf_salmon", Material.SALMON);
         registerFishRecipe("aquarium_shelf_tropical", Material.TROPICAL_FISH);
         registerFishRecipe("aquarium_shelf_pufferfish", Material.PUFFERFISH);
+        mobBucketManager.registerRecipes();
     }
 
     private void registerFishRecipe(String keyName, Material fish) {
