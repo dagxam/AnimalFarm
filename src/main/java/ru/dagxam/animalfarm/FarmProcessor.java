@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
-/** Координирует обработку фермы; тяжёлая логика вынесена в специализированные сервисы. */
+/** Координирует обработку фермы; специализированная логика вынесена в отдельные обработчики. */
 public final class FarmProcessor {
     private final AnimalFarmPlugin plugin;
     private final FarmSettings settings;
@@ -26,6 +26,7 @@ public final class FarmProcessor {
     private final FarmCapacityService capacityService;
     private final FarmWaterService waterService;
     private final FarmInventoryService inventoryService;
+    private final FarmBreedingProcessor breedingProcessor;
     private final NamespacedKey nextBreedDayKey;
     private final NamespacedKey productionDayKey;
     private final NamespacedKey goldenDayKey;
@@ -44,6 +45,7 @@ public final class FarmProcessor {
         this.goldenDayKey = new NamespacedKey(plugin, "golden_day");
         this.goldenCyclesKey = new NamespacedKey(plugin, "golden_cycles");
         this.farmStateKey = new NamespacedKey(plugin, "farm_state");
+        this.breedingProcessor = new FarmBreedingProcessor(plugin, settings, capacityService, waterService, inventoryService, nextBreedDayKey);
     }
 
     public void process(FarmObjectKey key, FarmObjectType type, long tick) {
@@ -62,10 +64,10 @@ public final class FarmProcessor {
         for (Animals animal : animals) plugin.genderManager().assignRandomIfSupported(animal);
         updateLandState(feeder, animals);
         if (!isHealthy(feeder)) return;
-        long nextBreedDay = getLong(feeder, nextBreedDayKey, -1L);
-        if (nextBreedDay < 0 || day >= nextBreedDay) runBreeding(feeder, animals, day);
+        int cycles = goldenCycles(feeder, feeder.getInventory(), day);
+        breedingProcessor.process(feeder, animals, day, cycles);
         long productionDay = getLong(feeder, productionDayKey, -1L);
-        if (productionDay < day) runProduction(feeder, animals, day);
+        if (productionDay < day) runProduction(feeder, animals, day, cycles);
     }
 
     private void updateLandState(Barrel feeder, List<Animals> animals) {
@@ -85,33 +87,8 @@ public final class FarmProcessor {
 
     private boolean isHealthy(Barrel feeder) { return "HEALTHY".equals(feeder.getPersistentDataContainer().get(farmStateKey, PersistentDataType.STRING)); }
 
-    private void runBreeding(Barrel feeder, List<Animals> animals, long day) {
-        if (!capacityService.canAddAnimal(animals.size(), 1)) return;
+    private void runProduction(Barrel feeder, List<Animals> animals, long day, int cycles) {
         Inventory inventory = feeder.getInventory();
-        int cycles = goldenCycles(feeder, inventory, day), bred = 0;
-        Map<EntityType, List<Animals>> groups = new HashMap<>();
-        for (Animals animal : animals) if (animal.isAdult() && animal.canBreed() && !animal.isLoveMode()) groups.computeIfAbsent(animal.getType(), ignored -> new ArrayList<>()).add(animal);
-        outer: for (int cycle = 0; cycle < cycles; cycle++) for (List<Animals> group : groups.values()) {
-            if (bred >= settings.maxBreedingPairsPerDay() || !capacityService.canAddAnimal(animals.size() + bred, 1)) break outer;
-            Animals male = null, female = null;
-            for (Animals animal : group) {
-                AnimalGender gender = plugin.genderManager().getOrAssign(animal);
-                if (gender == AnimalGender.MALE && male == null) male = animal;
-                if (gender == AnimalGender.FEMALE && female == null) female = animal;
-                if (male != null && female != null) break;
-            }
-            if (male == null || female == null || !plugin.genderManager().canBreed(male, female)) continue;
-            int foodCost = random(settings.animalFoodMin(), settings.animalFoodMax());
-            if (!consumeFoodForPair(male, female, inventory, foodCost)) continue;
-            if (!waterService.consumeWater(inventory, 1)) continue;
-            male.setLoveModeTicks(600); female.setLoveModeTicks(600); bred++;
-        }
-        feeder.getPersistentDataContainer().set(nextBreedDayKey, PersistentDataType.LONG, day + (cycles > 1 ? 1 : random(1, 3)));
-    }
-
-    private void runProduction(Barrel feeder, List<Animals> animals, long day) {
-        Inventory inventory = feeder.getInventory();
-        int cycles = goldenCycles(feeder, inventory, day);
         List<Animals> chickens = new ArrayList<>(), sheep = new ArrayList<>();
         for (Animals animal : animals) {
             if (!animal.isAdult()) continue;
@@ -155,7 +132,6 @@ public final class FarmProcessor {
         return null;
     }
 
-    private boolean consumeFoodForPair(Animals first, Animals second, Inventory inventory, int amount) { return first.getType() == second.getType() && inventoryService.consumeAnimalFood(first.getType(), inventory, amount * 2); }
     private void setState(Barrel feeder, String state) { feeder.getPersistentDataContainer().set(farmStateKey, PersistentDataType.STRING, state); }
     private long getLong(Barrel barrel, NamespacedKey key, long fallback) { return barrel.getPersistentDataContainer().getOrDefault(key, PersistentDataType.LONG, fallback); }
     private int random(int min, int max) { return ThreadLocalRandom.current().nextInt(Math.min(min, max), Math.max(min, max) + 1); }
