@@ -10,8 +10,10 @@ import org.bukkit.block.BlockState;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -94,7 +96,7 @@ public final class FarmObjectManager implements Listener {
     }
 
     public boolean canAccess(Player player, Block block) {
-        return plugin.ownershipManager().canUse(player, block);
+        return plugin.accessService().canUse(player, block);
     }
 
     public void clear() {
@@ -110,6 +112,24 @@ public final class FarmObjectManager implements Listener {
     @EventHandler(ignoreCancelled = true)
     public void onChunkLoad(ChunkLoadEvent event) {
         registerChunk(event.getChunk());
+    }
+
+    /**
+     * Защищает инвентарь кормушки и аквариума до его открытия.
+     * Доверенные игроки могут пользоваться объектом, но управление и демонтаж
+     * остаются только у владельца или администратора.
+     */
+    @EventHandler(ignoreCancelled = true)
+    public void onInteract(PlayerInteractEvent event) {
+        if (event.getAction() != Action.RIGHT_CLICK_BLOCK || event.getClickedBlock() == null) return;
+
+        Block block = event.getClickedBlock();
+        if (!isFarmObject(block)) return;
+
+        if (!plugin.accessService().canUse(event.getPlayer(), block)) {
+            event.setCancelled(true);
+            event.getPlayer().sendMessage(plugin.message("not-owner"));
+        }
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -154,7 +174,7 @@ public final class FarmObjectManager implements Listener {
             return;
         }
 
-        if (!plugin.ownershipManager().canManage(event.getPlayer(), block)) {
+        if (!plugin.accessService().canManage(event.getPlayer(), block)) {
             event.setCancelled(true);
             event.getPlayer().sendMessage(plugin.message("not-owner"));
             return;
