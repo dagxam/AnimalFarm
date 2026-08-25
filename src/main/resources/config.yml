@@ -26,10 +26,6 @@ hud:
   enabled: true
   range: 6
 
-# ============================================================
-# Система пола животных
-# Пол хранится непосредственно в животном через PersistentDataContainer.
-# ============================================================
 animal-genders:
   enabled: true
   male-chance: 50
@@ -54,14 +50,16 @@ animal-genders:
     female-variant: TEMPERATE
     black-ram: true
 
+# GRASS заменён на актуальный Bukkit Material SHORT_GRASS.
+# ANY_LEAVES и ANY_SEEDS — логические группы, которые обрабатываются FarmFoodService.
 feeding:
   daily-consumption-min: 3
   daily-consumption-max: 5
-  cow: { foods: [WHEAT, HAY_BLOCK, GRASS_BLOCK, GRASS, TALL_GRASS, ANY_LEAVES] }
-  sheep: { foods: [WHEAT, HAY_BLOCK, GRASS_BLOCK, GRASS, TALL_GRASS, ANY_LEAVES] }
-  goat: { foods: [WHEAT, HAY_BLOCK, GRASS_BLOCK, GRASS, TALL_GRASS, ANY_LEAVES] }
+  cow: { foods: [WHEAT, HAY_BLOCK, GRASS_BLOCK, SHORT_GRASS, TALL_GRASS, ANY_LEAVES] }
+  sheep: { foods: [WHEAT, HAY_BLOCK, GRASS_BLOCK, SHORT_GRASS, TALL_GRASS, ANY_LEAVES] }
+  goat: { foods: [WHEAT, HAY_BLOCK, GRASS_BLOCK, SHORT_GRASS, TALL_GRASS, ANY_LEAVES] }
   pig: { foods: [CARROT, POTATO, BEETROOT] }
-  horse: { foods: [WHEAT, HAY_BLOCK, GRASS_BLOCK, GRASS, TALL_GRASS, ANY_LEAVES] }
+  horse: { foods: [WHEAT, HAY_BLOCK, GRASS_BLOCK, SHORT_GRASS, TALL_GRASS, ANY_LEAVES] }
   rabbit: { foods: [CARROT, GOLDEN_CARROT] }
   chicken: { foods: [ANY_SEEDS] }
   fish: { foods: [ANY_SEEDS, SEAGRASS, KELP, SEA_PICKLE] }
