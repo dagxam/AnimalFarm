@@ -11,7 +11,6 @@ import org.bukkit.scheduler.BukkitTask;
 
 /**
  * Основной класс AnimalFarm.
- *
  * Плагин использует стандартный Bukkit/Spigot API и не привязан к конкретному ядру.
  */
 public final class AnimalFarmPlugin extends JavaPlugin {
@@ -25,6 +24,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
     private AnimalGenderHudManager genderHudManager;
     private AnimalVisualManager visualManager;
     private FarmProcessor farmProcessor;
+    private GoldenBoostManager goldenBoostManager;
     private FarmTaskScheduler taskScheduler;
     private MilkManager milkManager;
     private FishingManager fishingManager;
@@ -41,7 +41,6 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         startFarmTask();
         genderHudManager.start();
         visualManager.refreshLoadedAnimals();
-
         getLogger().info("AnimalFarm успешно запущен.");
     }
 
@@ -65,6 +64,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         visualManager = new AnimalVisualManager(this, genderManager);
         farmObjectManager.registerLoaded();
         farmProcessor = new FarmProcessor(this, settings);
+        goldenBoostManager = new GoldenBoostManager(this, settings);
         taskScheduler = new FarmTaskScheduler(this);
         milkManager = new MilkManager(this, settings);
         fishingManager = new FishingManager(this);
@@ -102,6 +102,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         farmObjectManager.clear();
         farmObjectManager.registerLoaded();
         farmProcessor = new FarmProcessor(this, settings);
+        goldenBoostManager = new GoldenBoostManager(this, settings);
         milkManager.setSettings(settings);
         visualManager.refreshLoadedAnimals();
         restartFarmTask();
@@ -167,7 +168,9 @@ public final class AnimalFarmPlugin extends JavaPlugin {
             var location = key.location(getServer());
             if (location.getWorld() == null) continue;
             FarmObjectType type = farmObjectManager.typeOf(location.getBlock());
-            if (type != null) farmProcessor.process(key, type, serverTick);
+            if (type == null) continue;
+            farmProcessor.process(key, type, serverTick);
+            goldenBoostManager.process(key, type, serverTick);
         }
     }
 }
