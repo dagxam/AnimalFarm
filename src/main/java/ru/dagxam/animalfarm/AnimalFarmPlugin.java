@@ -20,6 +20,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
     private FarmAreaAnalyzer areaAnalyzer;
     private FarmObjectManager farmObjectManager;
     private FarmOwnershipManager ownershipManager;
+    private FarmAccessService accessService;
     private AnimalGenderManager genderManager;
     private AnimalGenderHudManager genderHudManager;
     private AnimalVisualManager visualManager;
@@ -43,6 +44,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         startFarmTask();
         genderHudManager.start();
         manualWoolManager.start();
+        hudManager.start();
         visualManager.refreshLoadedAnimals();
         getLogger().info("AnimalFarm успешно запущен.");
     }
@@ -52,6 +54,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         if (tickTask != null) tickTask.cancel();
         if (taskScheduler != null) taskScheduler.stop();
         if (genderHudManager != null) genderHudManager.stop();
+        if (hudManager != null) hudManager.stop();
         if (manualWoolManager != null) manualWoolManager.stop();
         if (visualManager != null) visualManager.shutdown();
         if (farmObjectManager != null) farmObjectManager.clear();
@@ -63,6 +66,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         areaAnalyzer = new FarmAreaAnalyzer(settings);
         farmObjectManager = new FarmObjectManager(this, areaAnalyzer);
         ownershipManager = new FarmOwnershipManager(this);
+        accessService = new FarmAccessService(ownershipManager);
         genderManager = new AnimalGenderManager(this);
         genderHudManager = new AnimalGenderHudManager(this, genderManager);
         visualManager = new AnimalVisualManager(this, genderManager);
@@ -85,7 +89,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         pm.registerEvents(fishingManager, this);
         pm.registerEvents(hudManager, this);
         pm.registerEvents(new FreshFishReleaseManager(this), this);
-        pm.registerEvents(new AquariumFishHarvestManager(this), this);
+        pm.registerEvents(new AquariumFishHarvestManager(this, accessService), this);
         pm.registerEvents(new AnimalGenderListener(this, genderManager), this);
         pm.registerEvents(mobBucketManager, this);
         pm.registerEvents(manualWoolManager, this);
@@ -112,6 +116,8 @@ public final class AnimalFarmPlugin extends JavaPlugin {
         farmProcessor = new FarmProcessor(this, settings);
         goldenBoostManager = new GoldenBoostManager(this, settings);
         milkManager.setSettings(settings);
+        hudManager.stop();
+        hudManager.start();
         visualManager.refreshLoadedAnimals();
         restartFarmTask();
     }
@@ -119,6 +125,7 @@ public final class AnimalFarmPlugin extends JavaPlugin {
     public FarmSettings settings() { return settings; }
     public FarmObjectManager farmObjectManager() { return farmObjectManager; }
     public FarmOwnershipManager ownershipManager() { return ownershipManager; }
+    public FarmAccessService accessService() { return accessService; }
     public AnimalGenderManager genderManager() { return genderManager; }
     public AnimalVisualManager visualManager() { return visualManager; }
     public String message(String key) { return org.bukkit.ChatColor.translateAlternateColorCodes('&', getConfig().getString("messages." + key, "")); }
