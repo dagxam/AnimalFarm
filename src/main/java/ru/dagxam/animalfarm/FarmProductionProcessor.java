@@ -32,32 +32,39 @@ public final class FarmProductionProcessor {
         if (previousDay >= day) return;
 
         Inventory inventory = feeder.getInventory();
-        List<Animals> chickens = new ArrayList<>();
+        List<Animals> hens = new ArrayList<>();
         List<Animals> sheep = new ArrayList<>();
 
         for (Animals animal : animals) {
             if (!animal.isAdult()) continue;
-            if (animal.getType() == EntityType.CHICKEN) chickens.add(animal);
-            else if (animal.getType() == EntityType.SHEEP) sheep.add(animal);
+            if (animal.getType() == EntityType.CHICKEN) {
+                // Петухи не несут яйца.
+                if (plugin.genderManager().getOrAssign(animal) == AnimalGender.FEMALE) {
+                    hens.add(animal);
+                }
+            } else if (animal.getType() == EntityType.SHEEP) {
+                sheep.add(animal);
+            }
         }
 
         for (int cycle = 0; cycle < Math.max(1, cycles); cycle++) {
-            processEggs(inventory, chickens);
+            processEggs(inventory, hens);
             processWool(inventory, sheep);
         }
 
         feeder.getPersistentDataContainer().set(productionDayKey, PersistentDataType.LONG, day);
     }
 
-    private void processEggs(Inventory inventory, List<Animals> chickens) {
-        if (chickens.isEmpty()) return;
+    private void processEggs(Inventory inventory, List<Animals> hens) {
+        if (hens.isEmpty()) return;
         if (!inventoryService.consumeAnimalFood(EntityType.CHICKEN, inventory, settings.animalFoodMin())) return;
 
         int configured = random(
                 plugin.getConfig().getInt("production.chicken.eggs-min", 5),
                 plugin.getConfig().getInt("production.chicken.eggs-max", 10)
         );
-        addItems(inventory, Material.EGG, Math.min(chickens.size(), configured));
+        // Скин самки не влияет на тип яйца.
+        addItems(inventory, Material.EGG, Math.min(hens.size(), configured));
     }
 
     private void processWool(Inventory inventory, List<Animals> sheep) {
