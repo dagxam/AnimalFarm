@@ -20,9 +20,9 @@ public final class AquariumFishHarvestManager implements Listener {
     private final AnimalFarmPlugin plugin;
     private final FarmAccessService accessService;
 
-    public AquariumFishHarvestManager(AnimalFarmPlugin plugin) {
+    public AquariumFishHarvestManager(AnimalFarmPlugin plugin, FarmAccessService accessService) {
         this.plugin = plugin;
-        this.accessService = new FarmAccessService(plugin.ownershipManager());
+        this.accessService = accessService;
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -66,7 +66,8 @@ public final class AquariumFishHarvestManager implements Listener {
                 .filter(key -> key.worldId().equals(location.getWorld().getUID()))
                 .filter(key -> {
                     Location keyLocation = key.location(plugin.getServer());
-                    return plugin.farmObjectManager().typeOf(keyLocation.getBlock()) == FarmObjectType.AQUARIUM_SHELF;
+                    return keyLocation.getWorld() != null
+                            && plugin.farmObjectManager().typeOf(keyLocation.getBlock()) == FarmObjectType.AQUARIUM_SHELF;
                 })
                 .filter(key -> {
                     Location keyLocation = key.location(plugin.getServer());
