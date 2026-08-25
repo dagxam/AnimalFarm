@@ -9,7 +9,6 @@ import org.bukkit.entity.Animals;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Fish;
 import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 
 import java.util.ArrayList;
@@ -27,6 +26,7 @@ public final class FarmProcessor {
     private final FarmWaterService waterService;
     private final FarmInventoryService inventoryService;
     private final FarmBreedingProcessor breedingProcessor;
+    private final FarmProductionProcessor productionProcessor;
     private final NamespacedKey nextBreedDayKey;
     private final NamespacedKey productionDayKey;
     private final NamespacedKey goldenDayKey;
@@ -46,6 +46,7 @@ public final class FarmProcessor {
         this.goldenCyclesKey = new NamespacedKey(plugin, "golden_cycles");
         this.farmStateKey = new NamespacedKey(plugin, "farm_state");
         this.breedingProcessor = new FarmBreedingProcessor(plugin, settings, capacityService, waterService, inventoryService, nextBreedDayKey);
+        this.productionProcessor = new FarmProductionProcessor(plugin, settings, inventoryService, productionDayKey);
     }
 
     public void process(FarmObjectKey key, FarmObjectType type, long tick) {
@@ -66,8 +67,7 @@ public final class FarmProcessor {
         if (!isHealthy(feeder)) return;
         int cycles = goldenCycles(feeder, feeder.getInventory(), day);
         breedingProcessor.process(feeder, animals, day, cycles);
-        long productionDay = getLong(feeder, productionDayKey, -1L);
-        if (productionDay < day) runProduction(feeder, animals, day, cycles);
+        productionProcessor.process(feeder, animals, day, cycles);
     }
 
     private void updateLandState(Barrel feeder, List<Animals> animals) {
@@ -86,21 +86,6 @@ public final class FarmProcessor {
     }
 
     private boolean isHealthy(Barrel feeder) { return "HEALTHY".equals(feeder.getPersistentDataContainer().get(farmStateKey, PersistentDataType.STRING)); }
-
-    private void runProduction(Barrel feeder, List<Animals> animals, long day, int cycles) {
-        Inventory inventory = feeder.getInventory();
-        List<Animals> chickens = new ArrayList<>(), sheep = new ArrayList<>();
-        for (Animals animal : animals) {
-            if (!animal.isAdult()) continue;
-            if (animal.getType() == EntityType.CHICKEN) chickens.add(animal);
-            if (animal.getType() == EntityType.SHEEP) sheep.add(animal);
-        }
-        for (int cycle = 0; cycle < cycles; cycle++) {
-            if (!chickens.isEmpty() && inventoryService.consumeAnimalFood(EntityType.CHICKEN, inventory, settings.animalFoodMin())) addItems(inventory, Material.EGG, Math.min(chickens.size(), random(plugin.getConfig().getInt("production.chicken.eggs-min", 5), plugin.getConfig().getInt("production.chicken.eggs-max", 10))));
-            if (!sheep.isEmpty() && inventoryService.consumeAnimalFood(EntityType.SHEEP, inventory, settings.animalFoodMin())) addItems(inventory, Material.WHITE_WOOL, Math.min(sheep.size(), random(plugin.getConfig().getInt("production.wool.min", 2), plugin.getConfig().getInt("production.wool.max", 3))));
-        }
-        feeder.getPersistentDataContainer().set(productionDayKey, PersistentDataType.LONG, day);
-    }
 
     private int goldenCycles(Barrel feeder, Inventory inventory, long day) {
         if (getLong(feeder, goldenDayKey, -1L) == day) return feeder.getPersistentDataContainer().getOrDefault(goldenCyclesKey, PersistentDataType.INTEGER, 1);
@@ -135,5 +120,4 @@ public final class FarmProcessor {
     private void setState(Barrel feeder, String state) { feeder.getPersistentDataContainer().set(farmStateKey, PersistentDataType.STRING, state); }
     private long getLong(Barrel barrel, NamespacedKey key, long fallback) { return barrel.getPersistentDataContainer().getOrDefault(key, PersistentDataType.LONG, fallback); }
     private int random(int min, int max) { return ThreadLocalRandom.current().nextInt(Math.min(min, max), Math.max(min, max) + 1); }
-    private void addItems(Inventory inventory, Material material, int amount) { if (amount > 0) inventory.addItem(new ItemStack(material, amount)); }
 }
