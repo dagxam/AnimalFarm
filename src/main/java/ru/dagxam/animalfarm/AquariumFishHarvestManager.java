@@ -2,6 +2,7 @@ package ru.dagxam.animalfarm;
 
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
@@ -17,9 +18,11 @@ import org.bukkit.inventory.ItemStack;
  */
 public final class AquariumFishHarvestManager implements Listener {
     private final AnimalFarmPlugin plugin;
+    private final FarmAccessService accessService;
 
     public AquariumFishHarvestManager(AnimalFarmPlugin plugin) {
         this.plugin = plugin;
+        this.accessService = new FarmAccessService(plugin.ownershipManager());
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -30,16 +33,17 @@ public final class AquariumFishHarvestManager implements Listener {
         Entity creature = event.getRightClicked();
         ItemStack item = toHarvestItem(creature.getType());
         if (item == null) return;
-
-        // Свежей рыбой ПКМ по существу не должен забирать цель: этот предмет используется для выпуска рыбы в воду.
         if (isFreshFish(player.getInventory().getItemInMainHand())) return;
 
         FarmObjectKey aquariumKey = findAquarium(creature.getLocation());
         if (aquariumKey == null) return;
 
-        Location aquarium = aquariumKey.location(plugin.getServer());
+        Location aquariumLocation = aquariumKey.location(plugin.getServer());
+        if (aquariumLocation.getWorld() == null) return;
+        Block aquariumBlock = aquariumLocation.getBlock();
+
         if (plugin.settings().aquariumOwnerOnlyHarvest()
-                && !plugin.farmObjectManager().canAccess(player, aquarium.getBlock())) {
+                && !accessService.canHarvest(player, aquariumBlock)) {
             player.sendMessage(plugin.message("not-owner"));
             event.setCancelled(true);
             return;
