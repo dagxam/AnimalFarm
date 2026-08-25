@@ -12,7 +12,12 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockExplodeEvent;
+import org.bukkit.event.block.BlockFormEvent;
+import org.bukkit.event.block.BlockPistonExtendEvent;
+import org.bukkit.event.block.BlockPistonRetractEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.inventory.ItemStack;
@@ -33,33 +38,22 @@ public final class FarmObjectManager implements Listener {
         this.areaAnalyzer = areaAnalyzer;
     }
 
-    public void setAreaAnalyzer(FarmAreaAnalyzer areaAnalyzer) {
-        this.areaAnalyzer = areaAnalyzer;
-    }
-
-    public FarmAreaAnalyzer areaAnalyzer() {
-        return areaAnalyzer;
-    }
+    public void setAreaAnalyzer(FarmAreaAnalyzer areaAnalyzer) { this.areaAnalyzer = areaAnalyzer; }
+    public FarmAreaAnalyzer areaAnalyzer() { return areaAnalyzer; }
 
     public void registerLoaded() {
         for (var world : plugin.getServer().getWorlds()) {
-            for (Chunk chunk : world.getLoadedChunks()) {
-                registerChunk(chunk);
-            }
+            for (Chunk chunk : world.getLoadedChunks()) registerChunk(chunk);
         }
     }
 
     public void registerChunk(Chunk chunk) {
         for (BlockState state : chunk.getTileEntities()) {
-            if (state instanceof Barrel barrel && typeOf(barrel.getBlock()) != null) {
-                objects.add(FarmObjectKey.of(barrel.getLocation()));
-            }
+            if (state instanceof Barrel barrel && typeOf(barrel.getBlock()) != null) objects.add(FarmObjectKey.of(barrel.getLocation()));
         }
     }
 
-    public Set<FarmObjectKey> objects() {
-        return Set.copyOf(objects);
-    }
+    public Set<FarmObjectKey> objects() { return Set.copyOf(objects); }
 
     public FarmObjectType typeOf(Block block) {
         if (hasKey(block, "feeder_block")) return FarmObjectType.LAND_FEEDER;
@@ -67,27 +61,15 @@ public final class FarmObjectManager implements Listener {
         return null;
     }
 
-    public boolean isFarmObject(Block block) {
-        return typeOf(block) != null;
-    }
-
-    public boolean isFeederItem(ItemStack item) {
-        return hasItemKey(item, "feeder_item");
-    }
-
-    public boolean isAquariumShelfItem(ItemStack item) {
-        return hasItemKey(item, "aquarium_shelf_item");
-    }
+    public boolean isFarmObject(Block block) { return typeOf(block) != null; }
+    public boolean isFeederItem(ItemStack item) { return hasItemKey(item, "feeder_item"); }
+    public boolean isAquariumShelfItem(ItemStack item) { return hasItemKey(item, "aquarium_shelf_item"); }
 
     public UUID ownerOf(Block block) {
         if (!(block.getState() instanceof Barrel barrel)) return null;
         String value = barrel.getPersistentDataContainer().get(keyOf("owner_uuid"), PersistentDataType.STRING);
         if (value == null || value.isBlank()) return null;
-        try {
-            return UUID.fromString(value);
-        } catch (IllegalArgumentException ignored) {
-            return null;
-        }
+        try { return UUID.fromString(value); } catch (IllegalArgumentException ignored) { return null; }
     }
 
     public String ownerNameOf(Block block) {
@@ -95,9 +77,7 @@ public final class FarmObjectManager implements Listener {
         return barrel.getPersistentDataContainer().get(keyOf("owner_name"), PersistentDataType.STRING);
     }
 
-    public boolean canAccess(Player player, Block block) {
-        return plugin.accessService().canUse(player, block);
-    }
+    public boolean canAccess(Player player, Block block) { return plugin.accessService().canUse(player, block); }
 
     public void clear() {
         objects.clear();
@@ -110,22 +90,13 @@ public final class FarmObjectManager implements Listener {
     }
 
     @EventHandler(ignoreCancelled = true)
-    public void onChunkLoad(ChunkLoadEvent event) {
-        registerChunk(event.getChunk());
-    }
+    public void onChunkLoad(ChunkLoadEvent event) { registerChunk(event.getChunk()); }
 
-    /**
-     * Защищает инвентарь кормушки и аквариума до его открытия.
-     * Доверенные игроки могут пользоваться объектом, но управление и демонтаж
-     * остаются только у владельца или администратора.
-     */
     @EventHandler(ignoreCancelled = true)
     public void onInteract(PlayerInteractEvent event) {
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK || event.getClickedBlock() == null) return;
-
         Block block = event.getClickedBlock();
         if (!isFarmObject(block)) return;
-
         if (!plugin.accessService().canUse(event.getPlayer(), block)) {
             event.setCancelled(true);
             event.getPlayer().sendMessage(plugin.message("not-owner"));
@@ -136,30 +107,15 @@ public final class FarmObjectManager implements Listener {
     public void onPlace(BlockPlaceEvent event) {
         Block block = event.getBlockPlaced();
         invalidateNearbyArea(block.getLocation());
-
         if (!(block.getState() instanceof Barrel barrel)) return;
         boolean feeder = isFeederItem(event.getItemInHand());
         boolean aquarium = isAquariumShelfItem(event.getItemInHand());
         if (!feeder && !aquarium) return;
-
-        barrel.getPersistentDataContainer().set(
-                keyOf(feeder ? "feeder_block" : "aquarium_shelf_block"),
-                PersistentDataType.BYTE,
-                (byte) 1
-        );
-        barrel.getPersistentDataContainer().set(
-                keyOf("owner_uuid"),
-                PersistentDataType.STRING,
-                event.getPlayer().getUniqueId().toString()
-        );
-        barrel.getPersistentDataContainer().set(
-                keyOf("owner_name"),
-                PersistentDataType.STRING,
-                event.getPlayer().getName()
-        );
+        barrel.getPersistentDataContainer().set(keyOf(feeder ? "feeder_block" : "aquarium_shelf_block"), PersistentDataType.BYTE, (byte) 1);
+        barrel.getPersistentDataContainer().set(keyOf("owner_uuid"), PersistentDataType.STRING, event.getPlayer().getUniqueId().toString());
+        barrel.getPersistentDataContainer().set(keyOf("owner_name"), PersistentDataType.STRING, event.getPlayer().getName());
         barrel.setCustomName(feeder ? "Кормушка" : "Аквариумная кормушка");
         barrel.update(true, false);
-
         FarmObjectKey key = FarmObjectKey.of(block.getLocation());
         objects.add(key);
         if (areaAnalyzer != null) areaAnalyzer.invalidate(key);
@@ -169,39 +125,49 @@ public final class FarmObjectManager implements Listener {
     public void onBreak(BlockBreakEvent event) {
         Block block = event.getBlock();
         FarmObjectType type = typeOf(block);
-        if (type == null) {
-            invalidateNearbyArea(block.getLocation());
-            return;
-        }
-
+        if (type == null) { invalidateNearbyArea(block.getLocation()); return; }
         if (!plugin.accessService().canManage(event.getPlayer(), block)) {
             event.setCancelled(true);
             event.getPlayer().sendMessage(plugin.message("not-owner"));
             return;
         }
-
         FarmObjectKey key = FarmObjectKey.of(block.getLocation());
         objects.remove(key);
-        if (areaAnalyzer != null) areaAnalyzer.invalidate(key);
-
+        invalidateNearbyArea(block.getLocation());
         if (!(block.getState() instanceof Barrel barrel)) return;
         event.setDropItems(false);
-
-        ItemStack objectItem = type == FarmObjectType.LAND_FEEDER
-                ? plugin.createFeederItem()
-                : plugin.createAquariumShelfItem();
+        ItemStack objectItem = type == FarmObjectType.LAND_FEEDER ? plugin.createFeederItem() : plugin.createAquariumShelfItem();
         Location location = block.getLocation();
         block.getWorld().dropItemNaturally(location, objectItem);
-        for (ItemStack item : barrel.getInventory().getContents()) {
-            if (item != null && !item.getType().isAir()) {
-                block.getWorld().dropItemNaturally(location, item.clone());
-            }
-        }
+        for (ItemStack item : barrel.getInventory().getContents()) if (item != null && !item.getType().isAir()) block.getWorld().dropItemNaturally(location, item.clone());
     }
 
-    private void invalidateNearbyArea(Location location) {
-        if (areaAnalyzer != null) areaAnalyzer.invalidateNearby(location);
+    @EventHandler(ignoreCancelled = true)
+    public void onBlockForm(BlockFormEvent event) { invalidateNearbyArea(event.getBlock().getLocation()); }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onBlockExplode(BlockExplodeEvent event) {
+        for (Block block : event.blockList()) invalidateNearbyArea(block.getLocation());
     }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onEntityExplode(EntityExplodeEvent event) {
+        for (Block block : event.blockList()) invalidateNearbyArea(block.getLocation());
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onPistonExtend(BlockPistonExtendEvent event) {
+        invalidateNearbyArea(event.getBlock().getLocation());
+        for (Block block : event.getBlocks()) invalidateNearbyArea(block.getLocation());
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onPistonRetract(BlockPistonRetractEvent event) {
+        invalidateNearbyArea(event.getBlock().getLocation());
+        for (Block block : event.getBlocks()) invalidateNearbyArea(block.getLocation());
+    }
+
+    private void invalidateNearbyArea(Location location) { if (areaAnalyzer != null) areaAnalyzer.invalidateNearby(location); }
 
     private boolean hasKey(Block block, String key) {
         if (block == null || block.getType() != Material.BARREL || !(block.getState() instanceof Barrel barrel)) return false;
@@ -214,7 +180,5 @@ public final class FarmObjectManager implements Listener {
         return meta != null && meta.getPersistentDataContainer().has(keyOf(key), PersistentDataType.BYTE);
     }
 
-    private NamespacedKey keyOf(String key) {
-        return new NamespacedKey(plugin, key);
-    }
+    private NamespacedKey keyOf(String key) { return new NamespacedKey(plugin, key); }
 }
