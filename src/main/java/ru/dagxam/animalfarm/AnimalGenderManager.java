@@ -25,10 +25,10 @@ public final class AnimalGenderManager {
     }
 
     public boolean supported(Animals animal) {
-        if (!enabled()) return false;
+        if (!enabled() || animal == null) return false;
         String key = animal.getType().name().toLowerCase(Locale.ROOT);
         return switch (animal.getType()) {
-            case COW, MOOSHROOM, SHEEP, GOAT, PIG, CHICKEN ->
+            case COW, SHEEP, GOAT, PIG, CHICKEN, HORSE, RABBIT ->
                     plugin.getConfig().getBoolean("animal-genders.animals." + key, true);
             default -> false;
         };
@@ -43,21 +43,19 @@ public final class AnimalGenderManager {
             try {
                 return AnimalGender.valueOf(raw);
             } catch (IllegalArgumentException ignored) {
+                pdc.remove(genderKey);
             }
         }
 
         AnimalGender gender;
         if (animal instanceof Sheep sheep) {
-            // Чёрная и серая (тёмно-серая) овца — баран.
-            // Все остальные цвета — овца.
+            // Чёрная и серая овца — баран, остальные цвета — овца.
             DyeColor color = sheep.getColor();
             gender = (color == DyeColor.BLACK || color == DyeColor.GRAY)
                     ? AnimalGender.MALE
                     : AnimalGender.FEMALE;
-        } else if (animal.getType().name().equals("MOOSHROOM")) {
-            // mooshroom_brown относится к женскому варианту.
-            gender = AnimalGender.FEMALE;
         } else {
+            // Лошади и кролики, как и остальные поддерживаемые виды, получают случайный пол.
             gender = randomGender();
         }
 
@@ -70,14 +68,16 @@ public final class AnimalGenderManager {
     }
 
     public boolean canBreed(Animals first, Animals second) {
+        if (first == null || second == null || first.getType() != second.getType()) return false;
         if (!plugin.getConfig().getBoolean("animal-genders.breeding.require-male-and-female", true)) {
-            return first.getType() == second.getType();
+            return true;
         }
-        if (!supported(first) || !supported(second)) return first.getType() == second.getType();
-        return first.getType() == second.getType() && getOrAssign(first) != getOrAssign(second);
+        if (!supported(first) || !supported(second)) return true;
+        return getOrAssign(first) != getOrAssign(second);
     }
 
     public boolean canGiveMilk(Animals animal) {
+        if (animal == null) return false;
         if (!plugin.getConfig().getBoolean("animal-genders.milk.females-only", true)) return true;
         return !supported(animal) || getOrAssign(animal) == AnimalGender.FEMALE;
     }
@@ -89,7 +89,9 @@ public final class AnimalGenderManager {
         if (total <= 0) {
             return ThreadLocalRandom.current().nextBoolean() ? AnimalGender.MALE : AnimalGender.FEMALE;
         }
-        return ThreadLocalRandom.current().nextInt(total) < male ? AnimalGender.MALE : AnimalGender.FEMALE;
+        return ThreadLocalRandom.current().nextInt(total) < male
+                ? AnimalGender.MALE
+                : AnimalGender.FEMALE;
     }
 
     private int clamp(int value) {
