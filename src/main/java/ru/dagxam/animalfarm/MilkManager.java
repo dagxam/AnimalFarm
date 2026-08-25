@@ -36,22 +36,23 @@ public final class MilkManager implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onInteract(PlayerInteractEntityEvent event) {
-        // Только основная рука + Shift + правая кнопка. Обычный ПКМ никогда не запускает логику молока.
+        // Обрабатываем только основную руку, чтобы событие второй руки не срабатывало повторно.
         if (event.getHand() != org.bukkit.inventory.EquipmentSlot.HAND) return;
-        if (!event.getPlayer().isSneaking()) return;
 
         Entity target = event.getRightClicked();
         if (!(target instanceof Animals animal) || !isMilkAnimal(animal)) return;
 
         ItemStack hand = event.getPlayer().getInventory().getItemInMainHand();
 
+        // Детёныша можно кормить молоком обычной правой кнопкой без Shift.
         if (!animal.isAdult() && hand.getType() == Material.MILK_BUCKET) {
             event.setCancelled(true);
             feedBaby(event, animal);
             return;
         }
 
-        if (!animal.isAdult() || hand.getType() != Material.BUCKET) return;
+        // Доение взрослой самки — только Shift + правая кнопка + пустое ведро.
+        if (!animal.isAdult() || hand.getType() != Material.BUCKET || !event.getPlayer().isSneaking()) return;
 
         // Доить можно только самок: коров, овец, коз и лошадей.
         if (plugin.getConfig().getBoolean("animal-genders.milk.females-only", true)
