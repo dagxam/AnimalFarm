@@ -47,7 +47,9 @@ public final class FarmProcessor {
         long day = location.getWorld().getFullTime() / 24000L;
 
         if (!area.valid()) {
-            setState(barrel, type == FarmObjectType.LAND_FEEDER ? "OPEN" : "NO_WATER");
+            // Неверная конструкция и отсутствие воды — разные состояния.
+            // Не сообщаем "Нет воды", пока анализатор не подтвердил корректную область аквариума.
+            setState(barrel, "OPEN");
             barrel.update(true, false);
             return;
         }
@@ -70,48 +72,34 @@ public final class FarmProcessor {
         updateLandState(feeder, animals);
         if (!isHealthy(feeder)) return;
 
-        // Обычная ферма всегда выполняет базовый цикл один раз.
-        // Золотое ускорение выполняется отдельно только GoldenBoostManager.
         breedingProcessor.process(feeder, animals, day, 1);
         productionProcessor.process(feeder, animals, day, 1);
     }
 
     private void processAquarium(Barrel aquarium, FarmAreaCache area, long day) {
         List<Fish> fish = entityService.findFish(area);
-        // AquariumProcessor является единственной точкой обычной логики аквариума.
         aquariumProcessor.process(aquarium, area, fish, day, 1);
     }
 
     private void updateLandState(Barrel feeder, List<Animals> animals) {
         Inventory inventory = feeder.getInventory();
         String state;
-
-        if (animals.size() >= settings.animalCapacity()) {
-            state = "FULL";
-        } else if (!hasFoodForAnimals(inventory, animals, settings.animalFoodMin())) {
-            state = "NO_FOOD";
-        } else if (!waterService.hasWater(inventory, 1)) {
-            state = "NO_WATER";
-        } else {
-            state = "HEALTHY";
-        }
-
+        if (animals.size() >= settings.animalCapacity()) state = "FULL";
+        else if (!hasFoodForAnimals(inventory, animals, settings.animalFoodMin())) state = "NO_FOOD";
+        else if (!waterService.hasWater(inventory, 1)) state = "NO_WATER";
+        else state = "HEALTHY";
         setState(feeder, state);
     }
 
     private boolean hasFoodForAnimals(Inventory inventory, List<Animals> animals, int minimum) {
         for (Animals animal : animals) {
-            if (inventoryService.countAnimalFood(animal.getType(), inventory) >= minimum) {
-                return true;
-            }
+            if (inventoryService.countAnimalFood(animal.getType(), inventory) >= minimum) return true;
         }
         return false;
     }
 
     private boolean isHealthy(Barrel feeder) {
-        return "HEALTHY".equals(
-                feeder.getPersistentDataContainer().get(farmStateKey, PersistentDataType.STRING)
-        );
+        return "HEALTHY".equals(feeder.getPersistentDataContainer().get(farmStateKey, PersistentDataType.STRING));
     }
 
     private void setState(Barrel feeder, String state) {
