@@ -55,7 +55,6 @@ public final class AnimalGenderManager {
                     ? AnimalGender.MALE
                     : AnimalGender.FEMALE;
         } else {
-            // Лошади и кролики, как и остальные поддерживаемые виды, получают случайный пол.
             gender = randomGender();
         }
 
@@ -69,17 +68,21 @@ public final class AnimalGenderManager {
 
     public boolean canBreed(Animals first, Animals second) {
         if (first == null || second == null || first.getType() != second.getType()) return false;
-        if (!plugin.getConfig().getBoolean("animal-genders.breeding.require-male-and-female", true)) {
-            return true;
-        }
         if (!supported(first) || !supported(second)) return true;
-        return getOrAssign(first) != getOrAssign(second);
+        return AnimalGenderRules.canBreed(
+                getOrAssign(first),
+                getOrAssign(second),
+                plugin.getConfig().getBoolean("animal-genders.breeding.require-male-and-female", true)
+        );
     }
 
     public boolean canGiveMilk(Animals animal) {
         if (animal == null) return false;
-        if (!plugin.getConfig().getBoolean("animal-genders.milk.females-only", true)) return true;
-        return !supported(animal) || getOrAssign(animal) == AnimalGender.FEMALE;
+        if (!supported(animal)) return true;
+        return AnimalGenderRules.canGiveMilk(
+                getOrAssign(animal),
+                plugin.getConfig().getBoolean("animal-genders.milk.females-only", true)
+        );
     }
 
     public AnimalGender randomGender() {
