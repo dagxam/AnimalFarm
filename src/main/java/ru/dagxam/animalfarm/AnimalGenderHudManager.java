@@ -9,17 +9,20 @@ import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.RayTraceResult;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/** Показывает пол животного с ограниченной частотой и без повторных обновлений неизменившейся цели. */
+/** Показывает пол животного пакетно, чтобы не выполнять ray trace для всех игроков одновременно. */
 public final class AnimalGenderHudManager {
     private final AnimalFarmPlugin plugin;
     private final AnimalGenderManager genders;
     private final Map<UUID, UUID> lastTarget = new HashMap<>();
     private final Map<UUID, String> lastMessage = new HashMap<>();
     private BukkitTask task;
+    private int cursor;
 
     public AnimalGenderHudManager(AnimalFarmPlugin plugin, AnimalGenderManager genders) {
         this.plugin = plugin;
@@ -27,33 +30,38 @@ public final class AnimalGenderHudManager {
     }
 
     public void start() {
-        if (task != null) {
-            return;
-        }
+        if (task != null) return;
         long interval = Math.max(5L, plugin.getConfig().getLong("animal-genders.hud-update-ticks", 10L));
-        task = plugin.getServer().getScheduler().runTaskTimer(plugin, this::updateAll, interval, interval);
+        task = plugin.getServer().getScheduler().runTaskTimer(plugin, this::updateBatch, interval, interval);
     }
 
     public void stop() {
-        if (task != null) {
-            task.cancel();
-            task = null;
-        }
+        if (task != null) { task.cancel(); task = null; }
+        cursor = 0;
         lastTarget.clear();
         lastMessage.clear();
     }
 
-    private void updateAll() {
-        if (!plugin.getConfig().getBoolean("animal-genders.interaction.show-info-on-look", true)) {
-            return;
+    private void updateBatch() {
+        if (!plugin.getConfig().getBoolean("animal-genders.interaction.show-info-on-look", true)) return;
+        List<Player> players = new ArrayList<>(plugin.getServer().getOnlinePlayers());
+        if (players.isEmpty()) { cursor = 0; lastTarget.clear(); lastMessage.clear(); return; }
+
+        int batchSize = Math.max(1, plugin.getConfig().getInt("animal-genders.hud-max-players-per-update", 8));
+        int amount = Math.min(batchSize, players.size());
+        if (cursor >= players.size()) cursor = 0;
+
+        for (int i = 0; i < amount; i++) {
+            if (cursor >= players.size()) cursor = 0;
+            updatePlayer(players.get(cursor++));
         }
 
-        for (Player player : plugin.getServer().getOnlinePlayers()) {
-            updatePlayer(player);
-        }
+        lastTarget.keySet().removeIf(id -> plugin.getServer().getPlayer(id) == null);
+        lastMessage.keySet().removeIf(id -> plugin.getServer().getPlayer(id) == null);
     }
 
     private void updatePlayer(Player player) {
+        if (!player.isOnline() || player.isDead()) return;
         UUID playerId = player.getUniqueId();
         Entity target = findTarget(player);
         if (!(target instanceof Animals animal) || !genders.supported(animal)) {
@@ -65,29 +73,18 @@ public final class AnimalGenderHudManager {
         AnimalGender gender = genders.getOrAssign(animal);
         String message = buildText(animal, gender);
         UUID targetId = animal.getUniqueId();
-
-        if (targetId.equals(lastTarget.get(playerId)) && message.equals(lastMessage.get(playerId))) {
-            return;
-        }
+        if (targetId.equals(lastTarget.get(playerId)) && message.equals(lastMessage.get(playerId))) return;
 
         lastTarget.put(playerId, targetId);
         lastMessage.put(playerId, message);
-        sendActionBar(player, message);
+        player.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent.fromLegacyText(message));
     }
 
     private Entity findTarget(Player player) {
         double range = Math.max(1.0, plugin.getConfig().getDouble("animal-genders.hud-range", 8.0));
-        RayTraceResult result = player.getWorld().rayTraceEntities(
-                player.getEyeLocation(),
-                player.getEyeLocation().getDirection(),
-                range,
-                entity -> entity instanceof Animals animal && genders.supported(animal)
-        );
+        RayTraceResult result = player.getWorld().rayTraceEntities(player.getEyeLocation(), player.getEyeLocation().getDirection(), range,
+                entity -> entity instanceof Animals animal && genders.supported(animal));
         return result == null ? null : result.getHitEntity();
-    }
-
-    private void sendActionBar(Player player, String message) {
-        player.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent.fromLegacyText(message));
     }
 
     private String buildText(Animals animal, AnimalGender gender) {
