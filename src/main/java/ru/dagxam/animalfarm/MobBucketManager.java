@@ -4,9 +4,9 @@ import org.bukkit.DyeColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
-import org.bukkit.OfflinePlayer;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.entity.Ageable;
+import org.bukkit.entity.AnimalTamer;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Horse;
@@ -53,8 +53,7 @@ public final class MobBucketManager implements Listener {
     public void onCapture(PlayerInteractEntityEvent event) {
         if (event.getHand() != EquipmentSlot.HAND) return;
         Player player = event.getPlayer();
-        if (!(event.getRightClicked() instanceof LivingEntity entity)
-                || entity instanceof Player
+        if (!(event.getRightClicked() instanceof LivingEntity entity) || entity instanceof Player
                 || !isEmptyBucket(player.getInventory().getItemInMainHand())) return;
 
         event.setCancelled(true);
@@ -164,15 +163,11 @@ public final class MobBucketManager implements Listener {
         p.setProperty("glowing", Boolean.toString(entity.isGlowing()));
         p.setProperty("fireTicks", Integer.toString(entity.getFireTicks()));
 
-        if (entity instanceof Ageable ageable) {
-            p.setProperty("adult", Boolean.toString(ageable.isAdult()));
-        }
+        if (entity instanceof Ageable ageable) p.setProperty("adult", Boolean.toString(ageable.isAdult()));
         if (entity instanceof Tameable tameable) {
             p.setProperty("tamed", Boolean.toString(tameable.isTamed()));
-            OfflinePlayer owner = tameable.getOwner();
-            if (owner != null) {
-                p.setProperty("owner", owner.getUniqueId().toString());
-            }
+            AnimalTamer owner = tameable.getOwner();
+            if (owner != null) p.setProperty("owner", owner.getUniqueId().toString());
         }
         if (entity instanceof Sheep sheep) {
             p.setProperty("sheep.color", sheep.getColor().name());
@@ -182,38 +177,20 @@ public final class MobBucketManager implements Listener {
             p.setProperty("horse.color", horse.getColor().name());
             p.setProperty("horse.style", horse.getStyle().name());
         }
-        if (entity instanceof Rabbit rabbit) {
-            p.setProperty("rabbit.type", rabbit.getRabbitType().name());
-        }
+        if (entity instanceof Rabbit rabbit) p.setProperty("rabbit.type", rabbit.getRabbitType().name());
 
-        for (NamespacedKey key : entity.getPersistentDataContainer().getKeys()) {
+        PersistentDataContainer pdc = entity.getPersistentDataContainer();
+        for (NamespacedKey key : pdc.getKeys()) {
             if (!key.getNamespace().equals(plugin.getName().toLowerCase(Locale.ROOT))) continue;
             String base = "pdc." + key.getKey();
-            PersistentDataContainer pdc = entity.getPersistentDataContainer();
-
             String value = pdc.get(key, PersistentDataType.STRING);
-            if (value != null) {
-                p.setProperty(base + ".type", "STRING");
-                p.setProperty(base + ".value", value);
-                continue;
-            }
+            if (value != null) { p.setProperty(base + ".type", "STRING"); p.setProperty(base + ".value", value); continue; }
             Byte b = pdc.get(key, PersistentDataType.BYTE);
-            if (b != null) {
-                p.setProperty(base + ".type", "BYTE");
-                p.setProperty(base + ".value", Byte.toString(b));
-                continue;
-            }
+            if (b != null) { p.setProperty(base + ".type", "BYTE"); p.setProperty(base + ".value", Byte.toString(b)); continue; }
             Integer i = pdc.get(key, PersistentDataType.INTEGER);
-            if (i != null) {
-                p.setProperty(base + ".type", "INTEGER");
-                p.setProperty(base + ".value", i.toString());
-                continue;
-            }
+            if (i != null) { p.setProperty(base + ".type", "INTEGER"); p.setProperty(base + ".value", i.toString()); continue; }
             Long l = pdc.get(key, PersistentDataType.LONG);
-            if (l != null) {
-                p.setProperty(base + ".type", "LONG");
-                p.setProperty(base + ".value", l.toString());
-            }
+            if (l != null) { p.setProperty(base + ".type", "LONG"); p.setProperty(base + ".value", l.toString()); }
         }
         return new MobState(entity.getType(), p);
     }
@@ -228,46 +205,32 @@ public final class MobBucketManager implements Listener {
         entity.setFireTicks(parseInt(p.getProperty("fireTicks"), 0));
 
         if (entity instanceof Ageable ageable) {
-            if (Boolean.parseBoolean(p.getProperty("adult", "true"))) ageable.setAdult();
-            else ageable.setBaby();
+            if (Boolean.parseBoolean(p.getProperty("adult", "true"))) ageable.setAdult(); else ageable.setBaby();
         }
         if (entity instanceof Tameable tameable) {
             tameable.setTamed(Boolean.parseBoolean(p.getProperty("tamed", "false")));
             try {
                 String ownerId = p.getProperty("owner");
-                if (ownerId != null) {
-                    tameable.setOwner(plugin.getServer().getOfflinePlayer(UUID.fromString(ownerId)));
-                }
-            } catch (IllegalArgumentException ignored) {
-            }
+                if (ownerId != null) tameable.setOwner(plugin.getServer().getOfflinePlayer(UUID.fromString(ownerId)));
+            } catch (IllegalArgumentException ignored) { }
         }
         if (entity instanceof Sheep sheep) {
-            try {
-                sheep.setColor(DyeColor.valueOf(p.getProperty("sheep.color", sheep.getColor().name())));
-            } catch (IllegalArgumentException ignored) {
-            }
+            try { sheep.setColor(DyeColor.valueOf(p.getProperty("sheep.color", sheep.getColor().name()))); } catch (IllegalArgumentException ignored) { }
             sheep.setSheared(Boolean.parseBoolean(p.getProperty("sheep.sheared", "false")));
         }
         if (entity instanceof Horse horse) {
             try {
                 horse.setColor(Horse.Color.valueOf(p.getProperty("horse.color", horse.getColor().name())));
                 horse.setStyle(Horse.Style.valueOf(p.getProperty("horse.style", horse.getStyle().name())));
-            } catch (IllegalArgumentException ignored) {
-            }
+            } catch (IllegalArgumentException ignored) { }
         }
         if (entity instanceof Rabbit rabbit) {
-            try {
-                rabbit.setRabbitType(Rabbit.Type.valueOf(p.getProperty("rabbit.type", rabbit.getRabbitType().name())));
-            } catch (IllegalArgumentException ignored) {
-            }
+            try { rabbit.setRabbitType(Rabbit.Type.valueOf(p.getProperty("rabbit.type", rabbit.getRabbitType().name()))); } catch (IllegalArgumentException ignored) { }
         }
-
         restoreAnimalFarmPdc(entity.getPersistentDataContainer(), p);
 
         double health = parseDouble(p.getProperty("health"), entity.getHealth());
-        if (entity.getAttribute(Attribute.MAX_HEALTH) != null) {
-            health = Math.max(0.1D, Math.min(health, entity.getAttribute(Attribute.MAX_HEALTH).getValue()));
-        }
+        if (entity.getAttribute(Attribute.MAX_HEALTH) != null) health = Math.max(0.1D, Math.min(health, entity.getAttribute(Attribute.MAX_HEALTH).getValue()));
         entity.setHealth(health);
     }
 
@@ -278,14 +241,12 @@ public final class MobBucketManager implements Listener {
             String value = p.getProperty("pdc." + keyName + ".value");
             if (value == null) continue;
             NamespacedKey key = new NamespacedKey(plugin, keyName);
-
             switch (p.getProperty(property)) {
                 case "STRING" -> pdc.set(key, PersistentDataType.STRING, value);
                 case "BYTE" -> pdc.set(key, PersistentDataType.BYTE, (byte) parseInt(value, 0));
                 case "INTEGER" -> pdc.set(key, PersistentDataType.INTEGER, parseInt(value, 0));
                 case "LONG" -> pdc.set(key, PersistentDataType.LONG, parseLong(value, 0L));
-                default -> {
-                }
+                default -> { }
             }
         }
     }
@@ -294,9 +255,7 @@ public final class MobBucketManager implements Listener {
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             state.properties.store(out, null);
             return Base64.getEncoder().encodeToString(out.toByteArray());
-        } catch (IOException e) {
-            return "";
-        }
+        } catch (IOException e) { return ""; }
     }
 
     private MobState readState(ItemStack item) {
@@ -308,46 +267,17 @@ public final class MobBucketManager implements Listener {
             Properties p = new Properties();
             p.load(new ByteArrayInputStream(Base64.getDecoder().decode(data)));
             return new MobState(EntityType.valueOf(p.getProperty("type")), p);
-        } catch (Exception e) {
-            return null;
-        }
+        } catch (Exception e) { return null; }
     }
 
-    private String emptyToNull(String value) {
-        return value == null || value.isEmpty() ? null : value;
-    }
-
-    private int parseInt(String value, int fallback) {
-        try {
-            return Integer.parseInt(value);
-        } catch (Exception ignored) {
-            return fallback;
-        }
-    }
-
-    private long parseLong(String value, long fallback) {
-        try {
-            return Long.parseLong(value);
-        } catch (Exception ignored) {
-            return fallback;
-        }
-    }
-
-    private double parseDouble(String value, double fallback) {
-        try {
-            return Double.parseDouble(value);
-        } catch (Exception ignored) {
-            return fallback;
-        }
-    }
+    private String emptyToNull(String value) { return value == null || value.isEmpty() ? null : value; }
+    private int parseInt(String value, int fallback) { try { return Integer.parseInt(value); } catch (Exception ignored) { return fallback; } }
+    private long parseLong(String value, long fallback) { try { return Long.parseLong(value); } catch (Exception ignored) { return fallback; } }
+    private double parseDouble(String value, double fallback) { try { return Double.parseDouble(value); } catch (Exception ignored) { return fallback; } }
 
     private static final class MobState {
         private final EntityType type;
         private final Properties properties;
-
-        private MobState(EntityType type, Properties properties) {
-            this.type = type;
-            this.properties = properties;
-        }
+        private MobState(EntityType type, Properties properties) { this.type = type; this.properties = properties; }
     }
 }
