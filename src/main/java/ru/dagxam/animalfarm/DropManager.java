@@ -1,6 +1,5 @@
 package ru.dagxam.animalfarm;
 
-import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Entity;
@@ -8,7 +7,6 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
 
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -16,9 +14,11 @@ import java.util.concurrent.ThreadLocalRandom;
 public final class DropManager implements Listener {
 
     private final AnimalFarmPlugin plugin;
+    private final CustomDropService customDrops;
 
     public DropManager(AnimalFarmPlugin plugin) {
         this.plugin = plugin;
+        this.customDrops = new CustomDropService(plugin);
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -57,22 +57,12 @@ public final class DropManager implements Listener {
         return switch (animal) {
             case "cow" -> new ItemStack(Material.BEEF);
             case "sheep" -> new ItemStack(Material.MUTTON);
-            case "goat" -> named(Material.MUTTON, "&fКозлятина");
-            case "horse" -> named(Material.BEEF, "&fКонина");
-            case "rabbit" -> named(Material.RABBIT, "&fКрольчатина");
+            case "goat" -> customDrops.create(Material.MUTTON, "&fКозлятина", "goat_meat");
+            case "horse" -> customDrops.create(Material.BEEF, "&fКонина", "horse_meat");
+            case "rabbit" -> customDrops.create(Material.RABBIT, "&fКрольчатина", "rabbit_meat");
             case "chicken" -> new ItemStack(Material.CHICKEN);
             default -> new ItemStack(Material.BEEF);
         };
-    }
-
-    private ItemStack named(Material material, String name) {
-        ItemStack item = new ItemStack(material);
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', name));
-            item.setItemMeta(meta);
-        }
-        return item;
     }
 
     private void addConfiguredDrop(EntityDeathEvent event, ConfigurationSection section, String key, ItemStack prototype) {
