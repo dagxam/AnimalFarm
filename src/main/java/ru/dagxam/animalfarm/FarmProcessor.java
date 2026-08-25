@@ -1,29 +1,444 @@
 package ru.dagxam.animalfarm;
 
-import org.bukkit.Location; import org.bukkit.Material; import org.bukkit.World; import org.bukkit.block.Barrel; import org.bukkit.entity.Animals; import org.bukkit.entity.Entity; import org.bukkit.entity.EntityType; import org.bukkit.entity.Fish; import org.bukkit.inventory.Inventory; import org.bukkit.inventory.ItemStack; import org.bukkit.persistence.PersistentDataType;
-import java.util.*; import java.util.concurrent.ThreadLocalRandom;
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.World;
+import org.bukkit.block.Barrel;
+import org.bukkit.entity.Animals;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Fish;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.persistence.PersistentDataType;
 
-/** Единый процессор фермы v2. Поддерживает вместимость, состояние, производство, пол животных и аквакультуру. */
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
+
+/**
+ * Координирует работу фермы. Поиск сущностей, вместимость и вода вынесены
+ * в отдельные сервисы, поэтому здесь остаётся только последовательность механик.
+ */
 public final class FarmProcessor {
-    private final AnimalFarmPlugin plugin; private final FarmSettings settings; private final org.bukkit.NamespacedKey nextBreedDayKey,productionDayKey,goldenDayKey,goldenCyclesKey,farmStateKey;
-    public FarmProcessor(AnimalFarmPlugin p,FarmSettings s){plugin=p;settings=s;nextBreedDayKey=new org.bukkit.NamespacedKey(p,"next_breed_day");productionDayKey=new org.bukkit.NamespacedKey(p,"production_day");goldenDayKey=new org.bukkit.NamespacedKey(p,"golden_day");goldenCyclesKey=new org.bukkit.NamespacedKey(p,"golden_cycles");farmStateKey=new org.bukkit.NamespacedKey(p,"farm_state");}
-    public void process(FarmObjectKey key,FarmObjectType type,long tick){Location l=key.location(plugin.getServer());if(l.getWorld()==null||!(l.getBlock().getState() instanceof Barrel b))return;long day=l.getWorld().getFullTime()/24000L;if(type==FarmObjectType.LAND_FEEDER)processLand(b,l,day);else if(settings.aquariumEnabled())processAquarium(b,l,day);b.update(true,false);}
-    private void processLand(Barrel f,Location l,long day){List<Animals>a=findNearbyAnimals(l);for(Animals x:a)plugin.genderManager().assignRandomIfSupported(x);updateLandState(f,a);long next=f.getPersistentDataContainer().getOrDefault(nextBreedDayKey,PersistentDataType.LONG,-1L);if(next<0||day>=next)runBreeding(f,a,day);long pd=f.getPersistentDataContainer().getOrDefault(productionDayKey,PersistentDataType.LONG,-1L);if(pd<day)runProduction(f,a,day);}
-    private void updateLandState(Barrel f,List<Animals>a){Inventory i=f.getInventory();String s=a.size()>=settings.animalCapacity()?"FULL":(countAnimalFood(i)<settings.animalFoodMin()?"NO_FOOD":(count(i,Material.WATER_BUCKET)==0?"NO_WATER":"HEALTHY"));f.getPersistentDataContainer().set(farmStateKey,PersistentDataType.STRING,s);}
-    private void runBreeding(Barrel f,List<Animals>a,long day){if(a.size()>=settings.animalCapacity())return;Inventory inv=f.getInventory();int cycles=goldenCycles(f,inv,day),bred=0;Map<EntityType,List<Animals>>g=new HashMap<>();for(Animals x:a)if(x.isAdult()&&x.canBreed()&&!x.isLoveMode())g.computeIfAbsent(x.getType(),k->new ArrayList<>()).add(x);outer:for(int c=0;c<cycles;c++)for(List<Animals> group:g.values()){Animals male=null,female=null;for(Animals x:group){if(plugin.genderManager().getOrAssign(x)==AnimalGender.MALE&&male==null)male=x;else if(plugin.genderManager().getOrAssign(x)==AnimalGender.FEMALE&&female==null)female=x;}if(male==null||female==null||!plugin.genderManager().canBreed(male,female))continue;if(bred>=settings.maxBreedingPairsPerDay()||a.size()+bred>=settings.animalCapacity())break outer;int cost=random(settings.animalFoodMin(),settings.animalFoodMax());if(!consumeFoodForPair(male,female,inv,cost)||!consumeWater(inv,1))continue;male.setLoveModeTicks(600);female.setLoveModeTicks(600);bred++;}f.getPersistentDataContainer().set(nextBreedDayKey,PersistentDataType.LONG,day+(cycles>1?1:random(1,3)));}
-    private void runProduction(Barrel f,List<Animals>a,long day){Inventory inv=f.getInventory();int cycles=goldenCycles(f,inv,day),ch=0,sh=0,milk=0;for(Animals x:a)if(x.isAdult())switch(x.getType()){case CHICKEN->ch++;case SHEEP->sh++;case COW,GOAT->{if(plugin.genderManager().canGiveMilk(x))milk++;}default->{}}for(int c=0;c<cycles;c++){if(ch>0){int amount=Math.min(ch,random(plugin.getConfig().getInt("production.chicken.eggs-min",5),plugin.getConfig().getInt("production.chicken.eggs-max",10)));if(consumeAnyAnimalFood(inv,settings.animalFoodMin()))addItems(inv,Material.EGG,amount);}if(sh>0){int amount=Math.min(sh,random(plugin.getConfig().getInt("production.wool.min",2),plugin.getConfig().getInt("production.wool.max",3)));if(consumeAnyAnimalFood(inv,settings.animalFoodMin()))addItems(inv,Material.WHITE_WOOL,amount);}if(milk>0&&plugin.getConfig().getBoolean("milking.enabled",true)){int amount=Math.min(Math.min(milk,count(inv,Material.BUCKET)),random(plugin.getConfig().getInt("milking.milk-min",1),plugin.getConfig().getInt("milking.milk-max",3)));if(amount>0){remove(inv,Material.BUCKET,amount);addItems(inv,Material.MILK_BUCKET,amount);}}}f.getPersistentDataContainer().set(productionDayKey,PersistentDataType.LONG,day);}
-    private int goldenCycles(Barrel f,Inventory inv,long day){long marked=f.getPersistentDataContainer().getOrDefault(goldenDayKey,PersistentDataType.LONG,-1L);if(marked==day)return f.getPersistentDataContainer().getOrDefault(goldenCyclesKey,PersistentDataType.INTEGER,1);int cycles=1;if(removeOneIfPresent(inv,Material.GOLDEN_APPLE)||removeOneIfPresent(inv,Material.GOLDEN_CARROT))cycles=random(settings.goldenCyclesMin(),settings.goldenCyclesMax());f.getPersistentDataContainer().set(goldenDayKey,PersistentDataType.LONG,day);f.getPersistentDataContainer().set(goldenCyclesKey,PersistentDataType.INTEGER,cycles);return cycles;}
-    private void processAquarium(Barrel s,Location l,long day){List<Fish>fish=findNearbyFish(l);Inventory inv=s.getInventory();String state=fish.size()>=settings.fishCapacity()?"FULL":(countFishFood(inv)<settings.animalFoodMin()?"NO_FOOD":"HEALTHY");s.getPersistentDataContainer().set(farmStateKey,PersistentDataType.STRING,state);long next=s.getPersistentDataContainer().getOrDefault(nextBreedDayKey,PersistentDataType.LONG,-1L);if(next>=0&&day<next||fish.size()>=settings.fishCapacity())return;int cycles=goldenCycles(s,inv,day),created=0;Map<EntityType,List<Fish>>g=new HashMap<>();for(Fish x:fish)g.computeIfAbsent(x.getType(),k->new ArrayList<>()).add(x);outer:for(int c=0;c<cycles;c++)for(List<Fish>group:g.values())for(int n=0;n+1<group.size();n+=2){if(fish.size()+created>=settings.fishCapacity()||created>=settings.maxBreedingPairsPerDay())break outer;if(!consumeFishFood(inv,random(settings.animalFoodMin(),settings.animalFoodMax())))continue;Location w=findWater(l);if(w==null)break outer;l.getWorld().spawnEntity(w,group.get(n).getType());created++;}s.getPersistentDataContainer().set(nextBreedDayKey,PersistentDataType.LONG,day+(cycles>1?1:random(1,3)));}
-    private List<Animals>findNearbyAnimals(Location l){List<Animals>o=new ArrayList<>();for(Entity e:l.getWorld().getNearbyEntities(l,settings.penMaxRadius()+1,settings.penVerticalRange(),settings.penMaxRadius()+1))if(e instanceof Animals a&&supported(a))o.add(a);return o;}
-    private List<Fish>findNearbyFish(Location l){List<Fish>o=new ArrayList<>();for(Entity e:l.getWorld().getNearbyEntities(l,settings.aquariumMaxRadius(),settings.aquariumVerticalRange(),settings.aquariumMaxRadius()))if(e instanceof Fish f&&f.getLocation().getBlock().getType()==Material.WATER)o.add(f);return o;}
-    private boolean supported(Animals a){return switch(a.getType()){case COW,SHEEP,GOAT,PIG,CHICKEN,HORSE,RABBIT->true;default->false;};}
-    private Location findWater(Location c){World w=c.getWorld();if(w==null)return null;int r=settings.aquariumMaxRadius();for(int x=c.getBlockX()-r;x<=c.getBlockX()+r;x++)for(int y=c.getBlockY()-settings.aquariumVerticalRange();y<=c.getBlockY()+settings.aquariumVerticalRange();y++)for(int z=c.getBlockZ()-r;z<=c.getBlockZ()+r;z++)if(w.getBlockAt(x,y,z).getType()==Material.WATER)return new Location(w,x+.5,y+.2,z+.5);return null;}
-    private boolean consumeFoodForPair(Animals a,Animals b,Inventory inv,int amount){Material fa=findFood(a,inv),fb=findFood(b,inv);if(fa==null||fb==null)return false;if(fa==fb&&count(inv,fa)<amount*2)return false;if(fa!=fb&&(count(inv,fa)<amount||count(inv,fb)<amount))return false;remove(inv,fa,amount);remove(inv,fb,amount);return true;}
-    private Material findFood(Animals a,Inventory inv){for(String v:plugin.getConfig().getStringList("feeding."+a.getType().name().toLowerCase(Locale.ROOT)+".foods")){if("ANY_SEEDS".equalsIgnoreCase(v)){for(ItemStack i:inv.getContents())if(i!=null&&isSeed(i.getType()))return i.getType();}else{Material m=Material.matchMaterial(v);if(m!=null&&count(inv,m)>0)return m;}}return null;}
-    private boolean consumeAnyAnimalFood(Inventory inv,int amount){for(int s=0;s<inv.getSize();s++){ItemStack i=inv.getItem(s);if(i!=null&&isAnimalFood(i.getType())&&i.getAmount()>=amount){i.setAmount(i.getAmount()-amount);if(i.getAmount()==0)inv.setItem(s,null);return true;}}return false;}
-    private boolean consumeFishFood(Inventory inv,int amount){if(countFishFood(inv)<amount)return false;for(int s=0;s<inv.getSize()&&amount>0;s++){ItemStack i=inv.getItem(s);if(i==null||!isFishFood(i.getType()))continue;int t=Math.min(amount,i.getAmount());i.setAmount(i.getAmount()-t);if(i.getAmount()==0)inv.setItem(s,null);amount-=t;}return true;}
-    private boolean consumeWater(Inventory inv,int amount){if(count(inv,Material.WATER_BUCKET)<amount)return false;remove(inv,Material.WATER_BUCKET,amount);addItems(inv,Material.BUCKET,amount);return true;}
-    private int countAnimalFood(Inventory inv){int n=0;for(ItemStack i:inv.getContents())if(i!=null&&isAnimalFood(i.getType()))n+=i.getAmount();return n;} private int countFishFood(Inventory inv){int n=0;for(ItemStack i:inv.getContents())if(i!=null&&isFishFood(i.getType()))n+=i.getAmount();return n;}
-    private boolean isSeed(Material m){return m.name().endsWith("_SEEDS")||m==Material.PITCHER_POD;} private boolean isFishFood(Material m){return isSeed(m)||m==Material.SEAGRASS||m==Material.KELP||m==Material.SEA_PICKLE;} private boolean isAnimalFood(Material m){return isFishFood(m)||m==Material.WHEAT||m==Material.HAY_BLOCK||m==Material.APPLE||m==Material.CARROT||m==Material.MELON_SLICE||m==Material.PUMPKIN||m==Material.MELON||m==Material.GOLDEN_APPLE||m==Material.GOLDEN_CARROT;}
-    private int random(int min,int max){return ThreadLocalRandom.current().nextInt(Math.min(min,max),Math.max(min,max)+1);} private int count(Inventory inv,Material m){int n=0;for(ItemStack i:inv.getContents())if(i!=null&&i.getType()==m)n+=i.getAmount();return n;} private void remove(Inventory inv,Material m,int amount){for(int s=0;s<inv.getSize()&&amount>0;s++){ItemStack i=inv.getItem(s);if(i==null||i.getType()!=m)continue;int t=Math.min(amount,i.getAmount());i.setAmount(i.getAmount()-t);if(i.getAmount()==0)inv.setItem(s,null);amount-=t;}} private boolean removeOneIfPresent(Inventory inv,Material m){if(count(inv,m)==0)return false;remove(inv,m,1);return true;} private void addItems(Inventory inv,Material m,int amount){if(amount>0)inv.addItem(new ItemStack(m,amount));}
+    private final AnimalFarmPlugin plugin;
+    private final FarmSettings settings;
+    private final FarmEntityService entityService;
+    private final FarmCapacityService capacityService;
+    private final FarmWaterService waterService;
+
+    private final NamespacedKey nextBreedDayKey;
+    private final NamespacedKey productionDayKey;
+    private final NamespacedKey goldenDayKey;
+    private final NamespacedKey goldenCyclesKey;
+    private final NamespacedKey farmStateKey;
+
+    public FarmProcessor(AnimalFarmPlugin plugin, FarmSettings settings) {
+        this.plugin = plugin;
+        this.settings = settings;
+        this.entityService = new FarmEntityService(plugin, settings);
+        this.capacityService = new FarmCapacityService(settings);
+        this.waterService = new FarmWaterService();
+        this.nextBreedDayKey = new NamespacedKey(plugin, "next_breed_day");
+        this.productionDayKey = new NamespacedKey(plugin, "production_day");
+        this.goldenDayKey = new NamespacedKey(plugin, "golden_day");
+        this.goldenCyclesKey = new NamespacedKey(plugin, "golden_cycles");
+        this.farmStateKey = new NamespacedKey(plugin, "farm_state");
+    }
+
+    public void process(FarmObjectKey key, FarmObjectType type, long tick) {
+        Location location = key.location(plugin.getServer());
+        if (location.getWorld() == null || !(location.getBlock().getState() instanceof Barrel barrel)) return;
+
+        FarmAreaCache area = plugin.farmObjectManager().areaAnalyzer().analyze(key, type, plugin.getServer());
+        long day = location.getWorld().getFullTime() / 24000L;
+
+        if (!area.valid()) {
+            setState(barrel, type == FarmObjectType.LAND_FEEDER ? "OPEN" : "NO_WATER");
+            barrel.update(true, false);
+            return;
+        }
+
+        if (type == FarmObjectType.LAND_FEEDER) {
+            processLand(barrel, area, day);
+        } else if (settings.aquariumEnabled()) {
+            processAquarium(barrel, area, day);
+        }
+
+        barrel.update(true, false);
+    }
+
+    private void processLand(Barrel feeder, FarmAreaCache area, long day) {
+        List<Animals> animals = entityService.findAnimals(area);
+        for (Animals animal : animals) plugin.genderManager().assignRandomIfSupported(animal);
+
+        updateLandState(feeder, animals);
+        if (!isHealthy(feeder)) return;
+
+        long nextBreedDay = getLong(feeder, nextBreedDayKey, -1L);
+        if (nextBreedDay < 0 || day >= nextBreedDay) {
+            runBreeding(feeder, animals, day);
+        }
+
+        long productionDay = getLong(feeder, productionDayKey, -1L);
+        if (productionDay < day) {
+            runProduction(feeder, animals, day);
+        }
+    }
+
+    private void updateLandState(Barrel feeder, List<Animals> animals) {
+        Inventory inventory = feeder.getInventory();
+        String state;
+        if (animals.size() >= settings.animalCapacity()) {
+            state = "FULL";
+        } else if (countAnimalFood(inventory) < settings.animalFoodMin()) {
+            state = "NO_FOOD";
+        } else if (!waterService.hasWater(inventory, 1)) {
+            state = "NO_WATER";
+        } else {
+            state = "HEALTHY";
+        }
+        setState(feeder, state);
+    }
+
+    private boolean isHealthy(Barrel feeder) {
+        return "HEALTHY".equals(feeder.getPersistentDataContainer().get(farmStateKey, PersistentDataType.STRING));
+    }
+
+    private void runBreeding(Barrel feeder, List<Animals> animals, long day) {
+        if (!capacityService.canAddAnimal(animals.size(), 1)) return;
+
+        Inventory inventory = feeder.getInventory();
+        int cycles = goldenCycles(feeder, inventory, day);
+        int bred = 0;
+
+        Map<EntityType, List<Animals>> groups = new HashMap<>();
+        for (Animals animal : animals) {
+            if (animal.isAdult() && animal.canBreed() && !animal.isLoveMode()) {
+                groups.computeIfAbsent(animal.getType(), ignored -> new ArrayList<>()).add(animal);
+            }
+        }
+
+        outer:
+        for (int cycle = 0; cycle < cycles; cycle++) {
+            for (List<Animals> group : groups.values()) {
+                if (bred >= settings.maxBreedingPairsPerDay()) break outer;
+                if (!capacityService.canAddAnimal(animals.size() + bred, 1)) break outer;
+
+                Animals male = null;
+                Animals female = null;
+                for (Animals animal : group) {
+                    AnimalGender gender = plugin.genderManager().getOrAssign(animal);
+                    if (gender == AnimalGender.MALE && male == null) male = animal;
+                    if (gender == AnimalGender.FEMALE && female == null) female = animal;
+                    if (male != null && female != null) break;
+                }
+
+                if (male == null || female == null || !plugin.genderManager().canBreed(male, female)) continue;
+
+                int foodCost = random(settings.animalFoodMin(), settings.animalFoodMax());
+                if (!consumeFoodForPair(male, female, inventory, foodCost)) continue;
+                if (!waterService.consumeWater(inventory, 1)) continue;
+
+                male.setLoveModeTicks(600);
+                female.setLoveModeTicks(600);
+                bred++;
+            }
+        }
+
+        feeder.getPersistentDataContainer().set(
+                nextBreedDayKey,
+                PersistentDataType.LONG,
+                day + (cycles > 1 ? 1 : random(1, 3))
+        );
+    }
+
+    private void runProduction(Barrel feeder, List<Animals> animals, long day) {
+        Inventory inventory = feeder.getInventory();
+        int cycles = goldenCycles(feeder, inventory, day);
+        int chickens = 0;
+        int sheep = 0;
+
+        for (Animals animal : animals) {
+            if (!animal.isAdult()) continue;
+            switch (animal.getType()) {
+                case CHICKEN -> chickens++;
+                case SHEEP -> sheep++;
+                default -> { }
+            }
+        }
+
+        for (int cycle = 0; cycle < cycles; cycle++) {
+            if (chickens > 0) {
+                int amount = Math.min(chickens, random(
+                        plugin.getConfig().getInt("production.chicken.eggs-min", 5),
+                        plugin.getConfig().getInt("production.chicken.eggs-max", 10)
+                ));
+                if (consumeAnyAnimalFood(inventory, settings.animalFoodMin())) {
+                    addItems(inventory, Material.EGG, amount);
+                }
+            }
+
+            if (sheep > 0) {
+                int amount = Math.min(sheep, random(
+                        plugin.getConfig().getInt("production.wool.min", 2),
+                        plugin.getConfig().getInt("production.wool.max", 3)
+                ));
+                if (consumeAnyAnimalFood(inventory, settings.animalFoodMin())) {
+                    addItems(inventory, Material.WHITE_WOOL, amount);
+                }
+            }
+        }
+
+        feeder.getPersistentDataContainer().set(productionDayKey, PersistentDataType.LONG, day);
+    }
+
+    private int goldenCycles(Barrel feeder, Inventory inventory, long day) {
+        long markedDay = getLong(feeder, goldenDayKey, -1L);
+        if (markedDay == day) {
+            return feeder.getPersistentDataContainer().getOrDefault(goldenCyclesKey, PersistentDataType.INTEGER, 1);
+        }
+
+        int cycles = 1;
+        if (removeOneIfPresent(inventory, Material.GOLDEN_APPLE)
+                || removeOneIfPresent(inventory, Material.GOLDEN_CARROT)) {
+            cycles = random(settings.goldenCyclesMin(), settings.goldenCyclesMax());
+        }
+
+        feeder.getPersistentDataContainer().set(goldenDayKey, PersistentDataType.LONG, day);
+        feeder.getPersistentDataContainer().set(goldenCyclesKey, PersistentDataType.INTEGER, cycles);
+        return cycles;
+    }
+
+    private void processAquarium(Barrel aquarium, FarmAreaCache area, long day) {
+        List<Fish> fish = entityService.findFish(area);
+        Inventory inventory = aquarium.getInventory();
+
+        if (fish.size() >= settings.fishCapacity()) {
+            setState(aquarium, "FULL");
+            return;
+        }
+        if (countFishFood(inventory) < settings.animalFoodMin()) {
+            setState(aquarium, "NO_FOOD");
+            return;
+        }
+        setState(aquarium, "HEALTHY");
+
+        long nextBreedDay = getLong(aquarium, nextBreedDayKey, -1L);
+        if (nextBreedDay >= 0 && day < nextBreedDay) return;
+
+        int cycles = goldenCycles(aquarium, inventory, day);
+        int created = 0;
+        Map<EntityType, List<Fish>> groups = new HashMap<>();
+        for (Fish current : fish) {
+            groups.computeIfAbsent(current.getType(), ignored -> new ArrayList<>()).add(current);
+        }
+
+        outer:
+        for (int cycle = 0; cycle < cycles; cycle++) {
+            for (List<Fish> group : groups.values()) {
+                for (int index = 0; index + 1 < group.size(); index += 2) {
+                    if (created >= settings.maxBreedingPairsPerDay()) break outer;
+                    if (!capacityService.canAddFish(fish.size() + created, 1)) break outer;
+
+                    if (!consumeFishFood(inventory, random(settings.animalFoodMin(), settings.animalFoodMax()))) {
+                        continue;
+                    }
+
+                    Location spawn = findWater(area, group.get(index).getLocation());
+                    if (spawn == null) break outer;
+                    World world = spawn.getWorld();
+                    if (world == null) break outer;
+
+                    world.spawnEntity(spawn, group.get(index).getType());
+                    created++;
+                }
+            }
+        }
+
+        aquarium.getPersistentDataContainer().set(
+                nextBreedDayKey,
+                PersistentDataType.LONG,
+                day + (cycles > 1 ? 1 : random(1, 3))
+        );
+    }
+
+    private Location findWater(FarmAreaCache area, Location fallback) {
+        if (fallback != null && area.contains(fallback)
+                && fallback.getBlock().getType() == Material.WATER) {
+            return fallback.clone();
+        }
+
+        World world = area.center().getWorld();
+        if (world == null) return null;
+        for (FarmAreaCache.BlockPosition position : area.interior()) {
+            if (world.getBlockAt(position.x(), position.y(), position.z()).getType() == Material.WATER) {
+                return new Location(world, position.x() + 0.5, position.y() + 0.2, position.z() + 0.5);
+            }
+        }
+        return null;
+    }
+
+    private boolean consumeFoodForPair(Animals first, Animals second, Inventory inventory, int amount) {
+        Material firstFood = findFood(first, inventory);
+        Material secondFood = findFood(second, inventory);
+        if (firstFood == null || secondFood == null) return false;
+
+        if (firstFood == secondFood) {
+            if (count(inventory, firstFood) < amount * 2) return false;
+        } else if (count(inventory, firstFood) < amount || count(inventory, secondFood) < amount) {
+            return false;
+        }
+
+        remove(inventory, firstFood, amount);
+        remove(inventory, secondFood, amount);
+        return true;
+    }
+
+    private Material findFood(Animals animal, Inventory inventory) {
+        for (String value : plugin.getConfig().getStringList(
+                "feeding." + animal.getType().name().toLowerCase(Locale.ROOT) + ".foods"
+        )) {
+            if ("ANY_SEEDS".equalsIgnoreCase(value)) {
+                for (ItemStack item : inventory.getContents()) {
+                    if (item != null && isSeed(item.getType())) return item.getType();
+                }
+                continue;
+            }
+            if ("ANY_GRASS_LEAVES_BUSHES_FLOWERS".equalsIgnoreCase(value)) {
+                for (ItemStack item : inventory.getContents()) {
+                    if (item != null && isGrassOrLeaves(item.getType())) return item.getType();
+                }
+                continue;
+            }
+
+            Material material = Material.matchMaterial(value);
+            if (material != null && count(inventory, material) > 0) return material;
+        }
+        return null;
+    }
+
+    private boolean consumeAnyAnimalFood(Inventory inventory, int amount) {
+        for (int slot = 0; slot < inventory.getSize(); slot++) {
+            ItemStack item = inventory.getItem(slot);
+            if (item == null || !isAnimalFood(item.getType()) || item.getAmount() < amount) continue;
+
+            item.setAmount(item.getAmount() - amount);
+            if (item.getAmount() <= 0) inventory.setItem(slot, null);
+            return true;
+        }
+        return false;
+    }
+
+    private boolean consumeFishFood(Inventory inventory, int amount) {
+        if (countFishFood(inventory) < amount) return false;
+
+        for (int slot = 0; slot < inventory.getSize() && amount > 0; slot++) {
+            ItemStack item = inventory.getItem(slot);
+            if (item == null || !isFishFood(item.getType())) continue;
+
+            int consumed = Math.min(amount, item.getAmount());
+            item.setAmount(item.getAmount() - consumed);
+            amount -= consumed;
+            if (item.getAmount() <= 0) inventory.setItem(slot, null);
+        }
+        return true;
+    }
+
+    private int countAnimalFood(Inventory inventory) {
+        int total = 0;
+        for (ItemStack item : inventory.getContents()) {
+            if (item != null && isAnimalFood(item.getType())) total += item.getAmount();
+        }
+        return total;
+    }
+
+    private int countFishFood(Inventory inventory) {
+        int total = 0;
+        for (ItemStack item : inventory.getContents()) {
+            if (item != null && isFishFood(item.getType())) total += item.getAmount();
+        }
+        return total;
+    }
+
+    private boolean isSeed(Material material) {
+        return material.name().endsWith("_SEEDS") || material == Material.PITCHER_POD;
+    }
+
+    private boolean isGrassOrLeaves(Material material) {
+        return material.name().endsWith("_LEAVES")
+                || material == Material.GRASS_BLOCK
+                || material == Material.SHORT_GRASS
+                || material == Material.FERN
+                || material == Material.LARGE_FERN
+                || material == Material.MOSS_BLOCK;
+    }
+
+    private boolean isFishFood(Material material) {
+        return isSeed(material)
+                || material == Material.SEAGRASS
+                || material == Material.KELP
+                || material == Material.SEA_PICKLE;
+    }
+
+    private boolean isAnimalFood(Material material) {
+        return isFishFood(material)
+                || isGrassOrLeaves(material)
+                || material == Material.WHEAT
+                || material == Material.HAY_BLOCK
+                || material == Material.APPLE
+                || material == Material.CARROT
+                || material == Material.POTATO
+                || material == Material.BEETROOT
+                || material == Material.MELON_SLICE
+                || material == Material.PUMPKIN
+                || material == Material.MELON
+                || material == Material.GOLDEN_APPLE
+                || material == Material.GOLDEN_CARROT;
+    }
+
+    private void setState(Barrel feeder, String state) {
+        feeder.getPersistentDataContainer().set(farmStateKey, PersistentDataType.STRING, state);
+    }
+
+    private long getLong(Barrel barrel, NamespacedKey key, long fallback) {
+        return barrel.getPersistentDataContainer().getOrDefault(key, PersistentDataType.LONG, fallback);
+    }
+
+    private int random(int min, int max) {
+        return ThreadLocalRandom.current().nextInt(Math.min(min, max), Math.max(min, max) + 1);
+    }
+
+    private int count(Inventory inventory, Material material) {
+        int total = 0;
+        for (ItemStack item : inventory.getContents()) {
+            if (item != null && item.getType() == material) total += item.getAmount();
+        }
+        return total;
+    }
+
+    private void remove(Inventory inventory, Material material, int amount) {
+        for (int slot = 0; slot < inventory.getSize() && amount > 0; slot++) {
+            ItemStack item = inventory.getItem(slot);
+            if (item == null || item.getType() != material) continue;
+
+            int removed = Math.min(amount, item.getAmount());
+            item.setAmount(item.getAmount() - removed);
+            amount -= removed;
+            if (item.getAmount() <= 0) inventory.setItem(slot, null);
+        }
+    }
+
+    private boolean removeOneIfPresent(Inventory inventory, Material material) {
+        if (count(inventory, material) <= 0) return false;
+        remove(inventory, material, 1);
+        return true;
+    }
+
+    private void addItems(Inventory inventory, Material material, int amount) {
+        if (amount > 0) inventory.addItem(new ItemStack(material, amount));
+    }
 }
